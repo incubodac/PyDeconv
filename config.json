@@ -1,0 +1,30 @@
+{
+    "events_of_interest": {
+        "intercept_ev": "fixation",
+        "second_intercept_ev": null,
+        "second_delay": null
+    },
+    "model": {
+        "model_name": "targMin",
+        "additive_feats": [
+            "ontarget"
+        ],
+        "interaction_feat": null,
+        "tmin": -0.2,
+        "tmax": 0.9,
+        "use_splines": false,
+        "alpha": 40
+    },
+    "params": {
+        "event_type": "fixation",
+        "present": null,
+        "correct": null,
+        "mss": null,
+        "trials": null,
+        "phase": "vs",
+        "dur": 25,
+        "item_type": "onstm",
+        "dir": null,
+        "rank": null
+    }
+}
