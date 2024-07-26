@@ -1,40 +1,39 @@
 import config
+import pydeconv.PyDeconv
+import pydeconv.pydeconv_functions
+import pandas as pd
+from sklearn.linear_model import LinearRegression, Ridge, LassoLarsIC
+from sklearn.model_selection import KFold, StratifiedKFold, GridSearchCV
+from sklearn.metrics import mean_squared_error
+
 
 settings = analyze_data()
-
+settings
 # Initialize the model
-rERPs = PyDeconv(
-    tmin, tmax, sfreq, settings = settings , features = features)
-# We'll have (tmax - tmin) * sfreq delays
-# and an extra 2 delays since we are inclusive on the beginning / end index
-n_delays = int((tmax - tmin) * sfreq) + 2
+ERPdeconv= PyDeconv(settings = settings)
 
-n_splits = 3
-cv = KFold(n_splits)
+X_design = ERPdeconv.create_matrix()
+y_data   = ERPdeconv.data()
 
-# Prepare model data (make time the first dimension)
-speech = speech.T
-Y, _ = raw[:]  # Outputs for the model
-Y = Y.T
 
-# Iterate through splits, fit the model, and predict/test on held-out data
-coefs = np.zeros((n_splits, n_channels, n_delays))
-scores = np.zeros((n_splits, n_channels))
-for ii, (train, test) in enumerate(cv.split(speech)):
-    print(f"split {ii + 1} / {n_splits}")
-    rf.fit(speech[train], Y[train])
-    scores[ii] = rf.score(speech[test], Y[test])
-    # coef_ is shape (n_outputs, n_features, n_delays). we only have 1 feature
-    coefs[ii] = rf.coef_[:, 0, :]
-times = rf.delays_ / float(rf.sfreq)
+# num_folds = 5
+# param_grid = {'alpha': np.linspace(5, 500, 17)}
+# # Create StratifiedKFold object
+# kf = KFold(n_splits=num_folds)
 
-# Average scores and coefficients across CV splits
-mean_coefs = coefs.mean(axis=0)
-mean_scores = scores.mean(axis=0)
+# # Perform grid search with cross-validation
+# grid_search = GridSearchCV(estimator = ERPdeconv, param_grid=param_grid, scoring='neg_mean_squared_error', cv=kf)
+# grid_search.fit(X_design_, y_data)
 
-# Plot mean prediction scores across all channels
-fig, ax = plt.subplots(layout="constrained")
-ix_chs = np.arange(n_channels)
-ax.plot(ix_chs, mean_scores)
-ax.axhline(0, ls="--", color="r")
-ax.set(title="Mean prediction score", xlabel="Channel", ylabel="Score ($r$)")
+# # Extract results
+# cv_results = grid_search.cv_results_
+# alphas = param_grid['alpha']
+# mean_test_scores = cv_results['mean_test_score']
+
+# solver = grid_search.best_estimator_
+
+# plt.savefig(model_fig_path + f'average_validation_score_{subject_code}.png')
+
+
+# bestERPdeconv = PyDeconv(settings = settings,solver)
+# bestERPs.coef_ = bestERPdeconv.coef_

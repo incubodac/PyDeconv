@@ -22,7 +22,7 @@ from sklearn.linear_model import LinearRegression, Ridge
 #----------import experimental unfold------
 from utils.analysis_functions import (define_events ,saccades_intercept_evts_prev,saccades_intercept_evts_next,
     saccades_intercept_evts_nearest,balcklisted_trials)
-from unfoldpy.unfoldpy import Unfolder, create_design_matrix
+from pydeconv.pydeconv import PyDeconv, create_design_matrix
 
 
 
@@ -193,4 +193,60 @@ def parse_wilkinson_formula(formula):
     return {
         "intercept": has_intercept,
         "interactions": formatted_interactions,
-        "additive_features": list(additive_features)
+        "additive_features": list(additive_features)}
+
+
+def analyze_data():
+    # Accessing configuration settings
+    intercept_ev = config.events_of_interest['intercept_ev']
+    second_intercept_ev = config.events_of_interest['second_intercept_ev']
+    second_delay = config.events_of_interest['second_delay']
+    
+    model_name = config.model['model_name']
+    additive_feats = config.model['additive_feats']
+    interaction_feat = config.model['interaction_feat']
+    tmin = config.model['tmin']
+    tmax = config.model['tmax']
+    use_splines = config.model['use_splines']
+    alpha = config.model['alpha']
+    
+    event_type = config.params['event_type']
+    present = config.params['present']
+    correct = config.params['correct']
+    mss = config.params['mss']
+    trials = config.params['trials']
+    phase = config.params['phase']
+    dur = config.params['dur']
+    item_type = config.params['item_type']
+    dir = config.params['dir']
+    rank = config.params['rank']
+    
+    # Example use of these settings in your analysis
+    print(f"Analyzing data with model: {model_name}")
+    print(f"Time range: {tmin} to {tmax}")
+    print(f"Alpha value: {alpha}")
+    # Add your analysis logic here
+    
+    # Returning settings just for demonstration
+    return {
+        "intercept_ev": intercept_ev,
+        "second_intercept_ev": second_intercept_ev,
+        "second_delay": second_delay,
+        "model_name": model_name,
+        "additive_feats": additive_feats,
+        "interaction_feat": interaction_feat,
+        "tmin": tmin,
+        "tmax": tmax,
+        "use_splines": use_splines,
+        "alpha": alpha,
+        "event_type": event_type,
+        "present": present,
+        "correct": correct,
+        "mss": mss,
+        "trials": trials,
+        "phase": phase,
+        "dur": dur,
+        "item_type": item_type,
+        "dir": dir,
+        "rank": rank
+    }
