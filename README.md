@@ -40,6 +40,7 @@ Use
 The main function takes only two arguments first a Pandas DataFrame keyworded as features indicating the kind 
 of event to be modeledand the features taking part in the model formula as colums. It should look like this:
 
-![image feature DataFrame](/imgs/features.png)
+
+![screenshot](https://github.com/user-attachments/assets/38463a3e-358d-4341-8e08-1acfa841b33b)
 
 
