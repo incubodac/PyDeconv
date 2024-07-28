@@ -1,12 +1,11 @@
 from sklearn.base import BaseEstimator, is_regressor 
-from mne.decoding import get_coef
 import numpy as np
 import numbers
 
 
 
 
-class Unfolder(BaseEstimator):
+class PyDeconv(BaseEstimator):
     def __init__(
         self,
         tmin,

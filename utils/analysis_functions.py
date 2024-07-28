@@ -4,12 +4,12 @@ import sys
 import os
 from utils.functions_general import *
 import matplotlib.pyplot as plt
-from utils.paths import paths
+# from utils.paths import paths
 import os
 import time
 #import save
 from utils.load import *
-from utils.setup import *
+# from utils.setup import *
 #DAC code
 
 #Joaco code

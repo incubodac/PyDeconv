@@ -2,9 +2,9 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
-from utils.paths import paths
+# from utils.paths import paths
 from utils.functions import fig
-from utils.setup import *
+# from utils.setup import *
 from utils.load import *
 import pandas as pd
 import matplotlib.image as mpimg

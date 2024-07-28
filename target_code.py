@@ -1,39 +1,41 @@
-import config
-import pydeconv.PyDeconv
-import pydeconv.pydeconv_functions
+from pydeconv.pydeconv import PyDeconv 
+from pydeconv.pydeconv_functions import analyze_data
 import pandas as pd
-from sklearn.linear_model import LinearRegression, Ridge, LassoLarsIC
-from sklearn.model_selection import KFold, StratifiedKFold, GridSearchCV
-from sklearn.metrics import mean_squared_error
 
+data_path = "/example_data/"
 
 settings = analyze_data()
-settings
+features = pd.read_csv(data_path+"629959_full_metadata.csv") 
 # Initialize the model
-ERPdeconv= PyDeconv(settings = settings)
-
-X_design = ERPdeconv.create_matrix()
-y_data   = ERPdeconv.data()
-
-
-# num_folds = 5
-# param_grid = {'alpha': np.linspace(5, 500, 17)}
-# # Create StratifiedKFold object
-# kf = KFold(n_splits=num_folds)
-
-# # Perform grid search with cross-validation
-# grid_search = GridSearchCV(estimator = ERPdeconv, param_grid=param_grid, scoring='neg_mean_squared_error', cv=kf)
-# grid_search.fit(X_design_, y_data)
-
-# # Extract results
-# cv_results = grid_search.cv_results_
-# alphas = param_grid['alpha']
-# mean_test_scores = cv_results['mean_test_score']
-
-# solver = grid_search.best_estimator_
-
-# plt.savefig(model_fig_path + f'average_validation_score_{subject_code}.png')
+rERP_model = PyDeconv(settings = settings , features = features)
+X_design = rERP_model.create_matrix()
+y_data   = rERP_model.get_data()
 
 
-# bestERPdeconv = PyDeconv(settings = settings,solver)
-# bestERPs.coef_ = bestERPdeconv.coef_
+
+# Prepare model data (make time the first dimension)
+speech = speech.T
+Y, _ = raw[:]  # Outputs for the model
+Y = Y.T
+
+# Iterate through splits, fit the model, and predict/test on held-out data
+coefs = np.zeros((n_splits, n_channels, n_delays))
+scores = np.zeros((n_splits, n_channels))
+for ii, (train, test) in enumerate(cv.split(speech)):
+    print(f"split {ii + 1} / {n_splits}")
+    rf.fit(speech[train], Y[train])
+    scores[ii] = rf.score(speech[test], Y[test])
+    # coef_ is shape (n_outputs, n_features, n_delays). we only have 1 feature
+    coefs[ii] = rf.coef_[:, 0, :]
+times = rf.delays_ / float(rf.sfreq)
+
+# Average scores and coefficients across CV splits
+mean_coefs = coefs.mean(axis=0)
+mean_scores = scores.mean(axis=0)
+
+# Plot mean prediction scores across all channels
+fig, ax = plt.subplots(layout="constrained")
+ix_chs = np.arange(n_channels)
+ax.plot(ix_chs, mean_scores)
+ax.axhline(0, ls="--", color="r")
+ax.set(title="Mean prediction score", xlabel="Channel", ylabel="Score ($r$)")

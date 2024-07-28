@@ -9,12 +9,12 @@ events_of_interest = {
 model = {
     "model_name": "targMin",
     "formula": "y ~  1 + target*srank", 
-    "second_formula": "y ~ 1 + saccade_amplitude"
+    "second_formula": "y ~ 1 + saccade_amplitude",
     "tmin": -0.2,
     "tmax": 0.9,
-    "use_splines": False,
+    "use_splines": 5,
     "solver": "ridge",
     "alpha": "CV",
-    "scoring" = "rms"
+    "scoring": "rms"
 }
 

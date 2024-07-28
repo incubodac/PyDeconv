@@ -3,12 +3,12 @@ import utils.load as load
 import os
 import mne
 import matplotlib.pyplot as plt
-import utils.setup as setup
-from utils.paths import paths
+# import utils.setup as setup
+# from utils.paths import paths
 from utils.plot_general import *
 #import functions_general
 #joaco code
-exp_info = setup.exp_info()
+# exp_info = setup.exp_info()
 ############################-----MAKe compatible with mne e.g. pick types----------
 
 def cont_ArtifactDetect(EEG, amplitudeThreshold=150, windowsize=2000, channels=None, stepsize=100, combineSegments=None):
