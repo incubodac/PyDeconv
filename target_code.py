@@ -1,10 +1,8 @@
-from pydeconv.pydeconv import PyDeconv 
-from pydeconv.utils.pydeconv_functions import analyze_data
+
 import pandas as pd
 import mne
-# import os ,sys
-# os.chdir(os.path.dirname(os.path.realpath(__file__)))
-# sys.path.append("..")
+from pydeconv.utils import *
+from pydeconv import *
 
 # Load parameter, data and features
 data_path = "./example_data/"
