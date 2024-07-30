@@ -1,46 +1,65 @@
 from sklearn.base import BaseEstimator, is_regressor 
+from sklearn.linear_model import LinearRegression, Ridge, LassoLarsIC
+# from utils.winrej import cont_ArtifactDetect 
 import numpy as np
+from scipy.sparse import hstack 
 import numbers
-
+from .utils.pydeconv_functions import add_spline_features
 
 
 
 class PyDeconv(BaseEstimator):
-    def __init__(
-        self,
-        tmin,
-        tmax,
-        sfreq,
-        feature_names=None,
-        estimator=None,
-        chans_to_ana=128,
-        fit_intercept=None,
-        scoring="r2",
-        n_jobs=None,
-        verbose=None,
-        second_delay = None,
-        tmin2 = None,
-        tmax2 = None
-    ):
-        self.feature_names = feature_names
-        self.sfreq = float(sfreq)
-        self.tmin = tmin
-        self.tmax = tmax
-        self.estimator = 0.0 if estimator is None else estimator
-        self.fit_intercept = fit_intercept
-        self.scoring = scoring
-        self.n_jobs = n_jobs
-        self.delays_ = len(_delays(tmin,tmax,sfreq))
-        if second_delay is not None:
+    def __init__(self,
+        settings,
+        features,
+        eeg
+    ):  
+        self.model_name = settings['model_name']
+        self.fs_inter_ev = settings['first_intercept_event_type']
+        self.sd_inter_ev = settings['second_intercept_event_type']
+        self.data = eeg
+        self.features = features
+        self.sfreq = float(eeg.info['sfreq'])
+        self.tmin = settings['tmin']
+        self.tmax = settings['tmax']
+        self.fit_intercept = None
+        self.scoring = "r2"
+        self.n_jobs = None
+        self.delays_ = len(_delays(self.tmin,self.tmax,self.sfreq))
+        self.second_delay = settings['second_delay']
+        if self.second_delay is not None:
             self.delays2_ = len(_delays(tmin2,tmax2,sfreq))
         else:
             self.delays2_ = None
-        self.second_delay = second_delay
-        self.verbose = verbose
-        self.chans_to_ana = chans_to_ana
-        self.tmin2 = tmin2
-        self.tmax2 = tmax2
-        
+        self.verbose = None
+        self.chans_to_ana = settings['eeg_chns']
+        self.tmin2 = None
+        self.tmax2 = None
+        self.intercept = settings['parsed_formula']['intercept']
+        self.interactions = settings['parsed_formula']['interactions']
+        self.additive_features = settings['parsed_formula']['additive_features']
+        self.use_splines = settings['use_splines']
+        if settings['solver'] == 'ridge':
+            self.estimator = Ridge()
+        self.estimator = 0.0 if settings['solver'] is None else self.estimator
+       # Print the class attributes and model description
+        self._print_model_info()
+                
+    def _print_model_info(self):
+        print("\n" + "="*40)
+        print(f"Model Name: {self.model_name}")
+        print(f"First Intercept Event Type: {self.fs_inter_ev}")
+        print(f"Second Intercept Event Type: {self.sd_inter_ev}")
+        print(f"Sampling Frequency: {self.sfreq}")
+        print(f"Time Window: {self.tmin} to {self.tmax}")
+        print(f"Channels to Analyze: {self.chans_to_ana}")
+        print("\nModel Description:")
+        print(f"Intercept: {self.intercept}")
+        print(f"Additive Features: {self.additive_features}")
+        print(f"Interactions: {self.interactions}")
+        print("="*40 + "\n")
+
+
     def __repr__(self):  
         s = "tmin, tmax : (%.3f, %.3f), " % (self.tmin, self.tmax)
         estimator = self.estimator
@@ -244,6 +263,50 @@ class PyDeconv(BaseEstimator):
                     " estimator coefficients dimensions"
                 )
         return X, y, X_dim, y_dim
+    
+    def get_filtered_data(self,  thr = 300 ):
+        return self.data
+    
+    def create_matrix(self):
+        X = create_design_matrix(self.data,
+                                 self.tmin,
+                                 self.tmax,
+                                 self.sfreq, 
+                                 self.features, 
+                                 self.fs_inter_ev, 
+                                 self.additive_features,
+                                 self.interactions)
+        if isinstance(self.use_splines,int):
+            print('WARNING: B-SPLINES ARE BEING APPLIED')
+            second_intercept_events_metadata, second_intercept_features = add_spline_features(self.features)
+        else:
+            second_intercept_features = None
+
+        #for second delay use
+        if self.second_delay is True:
+            X_sacc = create_design_matrix(self.data,
+                                          tmin,
+                                          .3,
+                                          self.sfreq,
+                                          second_intercept_events_metadata, 
+                                          self.sd_inter_ev, 
+                                          second_intercept_features,
+                                          interaction=None)
+        if self.second_delay is None:
+            X_sacc = create_design_matrix(self.data,
+                                          self.tmin,
+                                          self.tmax,
+                                          self.sfreq,
+                                          second_intercept_events_metadata, 
+                                          self.sd_inter_ev, 
+                                          second_intercept_features,
+                                          interaction=None)
+        concatenated_matrix = hstack([X, X_sacc])
+        # print('type of hthe main martix',type(X))
+        # print('size of main matrix',X.shape)
+        # print('size of main+sacc matrix',concatenated_matrix.shape)
+        return concatenated_matrix
+
 
     
 def _times_to_samples(tmin, tmax, sfreq):
@@ -279,6 +342,7 @@ def closest_indices(arr1, arr2):
         closest_indices[i] = closest_index
     return closest_indices
 
+
 def create_design_matrix(raw,tmin,tmax,sr,events,intercept_evt, feature_cols,interaction=None):
     #building design matrix from scratch
     from scipy.sparse import csr_matrix
@@ -303,7 +367,7 @@ def create_design_matrix(raw,tmin,tmax,sr,events,intercept_evt, feature_cols,int
     evt_to_model['type'] = 1 #set intercept column to 1
     
     if interaction is not None:
-        inter_feats = interaction.split(':')
+        inter_feats = interaction[0].split(':')
         beta_int0 = inter_feats[0]
         beta_int1 = inter_feats[1]
         interaction_col = 'interaction' 
@@ -358,7 +422,6 @@ _SCORERS = {"r2": _r2_score}#, "corrcoef": _corr_score}
 
 if __name__=='__main__':
     from sklearn.linear_model import LinearRegression
-    from utils import exp_info, subject
     # Using os.path
     
 

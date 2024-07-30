@@ -65,8 +65,6 @@ def main():
     experiments = 'UON'
     print(experiment)
     model_name = experiment + model_combined_name
-    # model_name = 'UBAscaledRankRdSub300' #7.1 second run without splines and vif
-    # model_name = 'UONscaledRankRdSub300'  #7.2 second run without splines and vif
     ########################--MODEL-DEFINITION--#####################################################
     #----------------parameters for events of interest (base cond should have None)-----------------#
     intercept_ev= events_type['intercept_ev']

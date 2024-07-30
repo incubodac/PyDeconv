@@ -1,16 +1,24 @@
 from pydeconv.pydeconv import PyDeconv 
-from pydeconv.pydeconv_functions import analyze_data
+from pydeconv.utils.pydeconv_functions import analyze_data
 import pandas as pd
+import mne
+# import os ,sys
+# os.chdir(os.path.dirname(os.path.realpath(__file__)))
+# sys.path.append("..")
 
-data_path = "/example_data/"
-
+# Load parameter, data and features
+data_path = "./example_data/"
 settings = analyze_data()
-features = pd.read_csv(data_path+"629959_full_metadata.csv") 
+features = pd.read_csv(data_path + "629959_full_metadata.csv") 
+raw     = mne.io.read_raw_eeglab(data_path + "629959_analysis.set", preload=True)
+
 # Initialize the model
-rERP_model = PyDeconv(settings = settings , features = features)
+
+rERP_model = PyDeconv(settings = settings , features = features, eeg = raw)
 X_design = rERP_model.create_matrix()
 y_data   = rERP_model.get_data()
 
+print("HASTA AQUI LLEGAMOS")
 
 
 # Prepare model data (make time the first dimension)
