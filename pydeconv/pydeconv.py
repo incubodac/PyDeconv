@@ -5,7 +5,7 @@ import numpy as np
 from scipy.sparse import hstack 
 import numbers
 from .utils.pydeconv_functions import add_spline_features
-
+from .utils.plot_general import plot_model_results
 
 
 class PyDeconv(BaseEstimator):
@@ -273,7 +273,9 @@ class PyDeconv(BaseEstimator):
         channel_data = self.data.get_data().T
         y  = channel_data[:,:n_chs]
         return y
-    
+    def get_nonzero_data(self):
+        y = self.get_data()
+        return y[self.non_zero_rows]
     def create_matrix(self):
         X = create_design_matrix(self.data,
                                  self.tmin,
@@ -309,11 +311,20 @@ class PyDeconv(BaseEstimator):
                                           second_intercept_features,
                                           interaction=None)
         concatenated_matrix = hstack([X, X_sacc])
-        # print('type of hthe main martix',type(X))
-        # print('size of main matrix',X.shape)
-        # print('size of main+sacc matrix',concatenated_matrix.shape)
-        return concatenated_matrix
+        # Print the size of the original matrix and data
+        print("\n" + "="*40)
+        print("Original Design Matrix Shape:")
+        print(f"X_design shape: {concatenated_matrix.shape}")
+        print(f"y_data shape: {self.get_data().shape}")
+        print("="*40 + "\n")
+        # Identify rows with all zero values
+        non_zero_rows = concatenated_matrix.getnnz(axis=1) > 0
+        self.non_zero_rows = non_zero_rows
+        return concatenated_matrix[non_zero_rows]
 
+    def plot_coefs(self):
+        list_of_coeffs = []
+        plot_model_results(self,list_of_coeffs, figsize=[10,5],top_topos=True)
 
     
 def _times_to_samples(tmin, tmax, sfreq):
@@ -368,8 +379,11 @@ def create_design_matrix(raw,tmin,tmax,sr,events,intercept_evt, feature_cols,int
     n_samples_window = len(delays)
     #timelimits = [-.2,.4] #307  samples per predictor * 4
     zero_idx=closest_indices(delays,0)
-    evt_to_model = events[events['type'] == intercept_evt]
-    evt_to_model['type'] = 1 #set intercept column to 1
+    # Create a copy of the filtered DataFrame to avoid SettingWithCopyWarning
+    evt_to_model = events[events['type'] == intercept_evt].copy()
+
+    # Set the 'type' column values to 1 using column indexing to avoid FutureWarning
+    evt_to_model[evt_to_model.columns[evt_to_model.columns.get_loc('type')]] = 1
     
     if interaction is not None:
         inter_feats = interaction[0].split(':')

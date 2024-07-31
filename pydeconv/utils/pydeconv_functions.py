@@ -189,6 +189,8 @@ def parse_wilkinson_formula(formula):
     
     # Add remaining terms to additive features
     additive_features.update([term for term in right_side.split("+") if term])
+    if formatted_interactions == []:
+        formatted_interactions = None
     
     return {
         "intercept": has_intercept,
@@ -207,7 +209,7 @@ def analyze_data():
     tmin = config.model['tmin']
     tmax = config.model['tmax']
     use_splines = config.model['use_splines']
-    alpha = config.model['alpha']
+    # alpha = config.model['alpha']
     solver = config.model['solver']
     parsed_formula = parse_wilkinson_formula(formula)
     eeg_chns = config.model['eeg_chns']
@@ -216,8 +218,6 @@ def analyze_data():
     print(f"Analyzing data with model: {model_name}")
     print(f"Time range: {tmin} to {tmax}")
     print(f"Solver: {solver}")
-    print(f"Alpha value: {alpha}")
-    print(f"Alpha value: {alpha}")
  
     # Add your analysis logic here
     # For demonstration purposes, let's assume we generate some analysis results
@@ -230,7 +230,6 @@ def analyze_data():
         'tmin': tmin,
         'tmax': tmax,
         'use_splines': use_splines,
-        'alpha': alpha,
         'analysis_outcome': 'example_outcome',  # Placeholder for actual analysis results
         'eeg_chns' : eeg_chns,
         'parsed_formula': parsed_formula, 
