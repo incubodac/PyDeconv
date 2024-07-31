@@ -323,7 +323,152 @@ def plot_eye_fix_movements(all_fixations):
     plt.subplots_adjust(hspace=0.3, top=0.4)
 
 def plot_model_results(model_name,list_of_coeffs,figsize=[10,5],time_topos=None,top_topos=True):
-    return 1
+    import matplotlib.pyplot as plt
+    from matplotlib.gridspec import GridSpec
+    import numpy as np
+    import matplotlib.colors as mcolors
+    from matplotlib.ticker import FuncFormatter
+
+    vlims = [(-2.3,2.3),(-2.3,2.3),(-2.3,2.3),(-3.5,3.5),(-3.5,3.5)]
+    joint_ylims = dict(eeg=[-3, 3])
+    tfce_topos_ylims = [dict(eeg=[-2.5, 2.5]),dict(eeg=[-2.5, 2.5]),dict(eeg=[-2.5, 2.5]),dict(eeg=[-2.5, 2.5]),dict(eeg=[-2.5, 2.5])]
+    top_slide = 0.02
+    horizontal_jump = 0.2
+    
+    
+    
+    if time_topos is not None:
+        time_plots = time_topos
+    
+        
+    combined_model_path = paths().combined_model_path(model_name)
+    coeffs = list_of_coeffs
+    fig = plt.figure(constrained_layout=False,figsize=figsize) 
+
+    jump=0
+    for coeff in list_of_coeffs:
+        if top_topos:
+            ax_topo1 = fig.add_axes((0.033+jump*horizontal_jump, 0.75, 0.038, 0.07))
+            ax_topo2 = fig.add_axes((0.033+jump*horizontal_jump+top_slide+0.03, 0.75, 0.038, 0.07))
+            ax_topo3 = fig.add_axes((0.033+jump*horizontal_jump+top_slide*2+0.03*2, 0.75, 0.038, 0.07))
+            ax_topo_cb = fig.add_axes((0.033+jump*horizontal_jump+top_slide*3+0.03*3, 0.75, 0.004, 0.09))
+            axs_topos = [ax_topo1, ax_topo2, ax_topo3, ax_topo_cb]
+        # 
+        ax_frp = fig.add_axes((0.033+jump*horizontal_jump, 0.47, 0.152, 0.2))
+        ax_tfce = fig.add_axes((0.033+jump*horizontal_jump, 0.27, 0.152, 0.2))
+        ax_tfce_topo = fig.add_axes((0.08+jump*horizontal_jump, -0.015, 0.06, 0.25))
+        ax_tfce_topo_cb = fig.add_axes((0.2+jump*horizontal_jump, 0.08, 0.003, 0.3))
+        jump+=1
+        # Group axes
+
+        # file names
+        ave_fname = f'/grand_average_coeff_{coeff}-ave.fif'
+        clus_fname = f'/cluster_{coeff}.npy'
+        
+        
+        # create gridspec for topos and main plot of rFRPs
+        grand_avg = mne.read_evokeds(combined_model_path+ave_fname, baseline=(None, 0), verbose=False)
+        grand_avg[0].nave = None
+        # grand_avg[0].ch_type = None
+
+        if top_topos:
+            grand_avg[0].plot_joint(title="",ts_args={'xlim': (-.1,.4),'ylim':joint_ylims,'axes':ax_frp,'titles':dict(eeg=''),'window_title':''},
+                                        topomap_args={'vlim':vlims[coeff],'contours':2,'axes':axs_topos,'size':.8},
+                                        show=False)
+        else:
+            if coeff ==2:
+                xmax = .85
+            else:
+                xmax = .85
+            grand_avg[0].plot(axes=ax_frp,titles=dict(eeg=''),window_title='',xlim= (-.1,xmax),ylim=joint_ylims,
+                            show=False)
+            
+        time_plot = time_plots[coeff] # For highlighting a specific time. 
+        ax_frp.axvline(time_plot, ls="--", color="k", lw=1)
+        ax_frp.axvline(0, ls="-", color="k", lw=.9)
+
+        # clean axis
+        ax_frp.set_xlabel([])
+        ax_frp.set_xticklabels([])
+        ax_frp.set_title('')
+        if top_topos:
+            ax_cb = axs_topos[-1]
+            ax_cb.set_title(f'$\mu V$')
+                # topos fonts
+            for top in axs_topos:
+                top.title.set_fontsize(10)
+                # top.set_title('')
+
+        fig.set_label('')
+        fig.legends = []
+        ax_tfce.legend().set_visible(False)
+
+
+
+        # TFCE Plot
+        clusters_mask = np.load(combined_model_path+clus_fname)
+        ax_tfce.axvline(time_plot, ls="--", color="k", lw=1)
+        ax_tfce.axvline(0, ls="-", color="k", lw=.9)
+        # Greys
+        greys_cmap = plt.cm.get_cmap('Greys')
+        colors = greys_cmap(np.linspace(0, 1, 256))
+        # Adjust the luminance values to make the colormap darker
+        colors[:, :3] *= 0.6  # Multiply RGB values by 0.7 to darken them
+        custom_cmap= mcolors.ListedColormap(colors)
+        #title = 'TFCE p-value'# with alpha level={pval_threshold}'
+        if coeff ==2:
+            xmax = .85
+            grand_avg[0].plot_image(cmap='RdBu_r', mask=clusters_mask, mask_style='mask', mask_alpha=0.5,
+                            titles=None, axes=ax_tfce,show=False,xlim=(-.1,xmax),mask_cmap=custom_cmap, clim=tfce_topos_ylims[coeff],colorbar=False)
+    
+        else:
+            xmax = .85
+            grand_avg[0].plot_image(cmap='RdBu_r', mask=clusters_mask, mask_style='mask', mask_alpha=0.5,
+                            titles=None, axes=ax_tfce,show=False,xlim=(-.1,xmax),mask_cmap=custom_cmap, clim=tfce_topos_ylims[coeff],colorbar=False)
+    
+        # clean tfce axis
+        ax_tfce.set_title('') 
+        if jump!=1:
+            #clean all but the first
+            ax_frp.set_yticklabels([])
+            ax_tfce.set_yticklabels([])
+            ax_tfce.set_ylabel('')
+            ax_frp.set_ylabel('')
+
+        times = grand_avg[0].times
+        ix_plot = np.argmin(np.abs(time_plot - times))
+        
+        coeff_data = grand_avg[0].get_data()
+        max_coef = coeff_data.max()
+        vlims_tfce_topo=(tfce_topos_ylims[coeff]['eeg'][0]*1e-6,tfce_topos_ylims[coeff]['eeg'][1]*1e-6)
+        topo,cm = mne.viz.plot_topomap(
+            coeff_data[:, ix_plot], pos=grand_avg[0].info, axes=ax_tfce_topo, show=False, vlim=(vlims_tfce_topo[0],vlims_tfce_topo[1]),#vlim=(-max_coef, max_coef)
+        mask=clusters_mask[:,ix_plot],mask_params=dict(marker='o', markerfacecolor='w', markeredgecolor='k',
+                linewidth=0, markersize=3),contours=4,cmap='RdBu_r')
+        v1 = np.linspace(vlims_tfce_topo[0], vlims_tfce_topo[1], 5, endpoint=True)
+        clb = fig.colorbar(topo, cax=ax_tfce_topo_cb,ticks=v1)
+        # Define the formatting function
+        def format_ticks(value, pos):
+            return f'{value * 1e6:.1f}'
+        clb.ax.yaxis.set_major_formatter(FuncFormatter(format_ticks))
+        clb.ax.yaxis.set_tick_params(labelsize=7)  # Adjust font size here
+
+        ax_tfce_topo_cb.set_title(f'$\mu V$',fontsize=12) # title
+        ax_tfce_topo.set_xlabel("%s ms" % time_plot)
+        ax_tfce_topo.title.set_size(10)
+
+        ax_frp.set_title('')
+    ch = fig.get_children()
+    for ax in ch:
+        childs = ax.get_children()
+        for c in childs:
+            if isinstance(c,plt.Text):
+                if '(64' in c.get_text():
+                    c.remove()
+    # plt.legend('')
+    # child = fig.get_children()
+    # ax_erase = child[10].remove()
+    return fig
 
 
 def plot_tfce_results_paper(model_name,list_of_coeffs,figsize=[10,5],time_topos=None,top_topos=True):
