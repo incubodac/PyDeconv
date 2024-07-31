@@ -78,7 +78,7 @@ class PyDeconv(BaseEstimator):
             s += "fit: False"
         if hasattr(self, "scores_"):
             s += "scored (%s)" % self.scoring
-        return "<Unfolder | %s>" % s
+        return "<PyDeconv | %s>" % s
         
         
     
