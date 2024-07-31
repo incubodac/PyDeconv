@@ -265,7 +265,14 @@ class PyDeconv(BaseEstimator):
         return X, y, X_dim, y_dim
     
     def get_filtered_data(self,  thr = 300 ):
+        "Not implemented"
         return self.data
+
+    def get_data(self):
+        n_chs = self.chans_to_ana
+        channel_data = self.data.get_data().T
+        y  = channel_data[:,:n_chs]
+        return y
     
     def create_matrix(self):
         X = create_design_matrix(self.data,
@@ -360,8 +367,6 @@ def create_design_matrix(raw,tmin,tmax,sr,events,intercept_evt, feature_cols,int
     delays = _delays(tmin,tmax,sr)
     n_samples_window = len(delays)
     #timelimits = [-.2,.4] #307  samples per predictor * 4
-
-
     zero_idx=closest_indices(delays,0)
     evt_to_model = events[events['type'] == intercept_evt]
     evt_to_model['type'] = 1 #set intercept column to 1
@@ -379,11 +384,8 @@ def create_design_matrix(raw,tmin,tmax,sr,events,intercept_evt, feature_cols,int
     expanded_params = (1+n_predictors)*n_samples_window
     signal_longitud_in_samples = raw.n_times
 
-
     X = np.zeros([signal_longitud_in_samples, expanded_params])
 
-
-    
     count_events = len(evt_to_model)
     evt_lat = evt_to_model['latency']
     evt_lat = evt_lat.values.astype(int)
