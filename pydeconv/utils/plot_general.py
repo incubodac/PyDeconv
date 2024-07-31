@@ -322,6 +322,9 @@ def plot_eye_fix_movements(all_fixations):
     plt.subplots_adjust(wspace=0.3)
     plt.subplots_adjust(hspace=0.3, top=0.4)
 
+def plot_model_results(model_name,list_of_coeffs,figsize=[10,5],time_topos=None,top_topos=True):
+    return 1
+
 
 def plot_tfce_results_paper(model_name,list_of_coeffs,figsize=[10,5],time_topos=None,top_topos=True):
     import matplotlib.pyplot as plt

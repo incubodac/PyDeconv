@@ -11,7 +11,7 @@ model = {
     "formula": "y ~  1 + ontarget*mss", 
     "second_formula": "y ~ 1 + saccade_amplitude",
     "tmin": -0.2,
-    "tmax": 0.9,
+    "tmax": 0.5,
     "use_splines": 5,
     "solver": "ridge",
     "alpha": "CV",
