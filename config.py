@@ -11,7 +11,7 @@ model = {
     "formula": "y ~  1 + ontarget", 
     "second_formula": "y ~ 1 + saccade_amplitude",
     "tmin": -0.2,
-    "tmax": 0.5,
+    "tmax": 0.3,
     "use_splines": 5,
     "solver": "ridge",
     "scoring": "rms",

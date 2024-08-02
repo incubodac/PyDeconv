@@ -30,18 +30,18 @@ param_grid = {'alpha': alphas.tolist()}
 kf = KFold(n_splits=num_folds)
 # Perform grid search with cross-validation
 grid_search = GridSearchCV(estimator=solver, param_grid=param_grid, scoring='neg_mean_squared_error', cv=kf,verbose=5)
-grid_search.fit(X_design, y_data)
+# grid_search.fit(X_design, y_data)
 # rERP_model.estimator.set_params(alpha = 40)
-# rERP_model.fit(X_design, y_data)
+rERP_model.fit(X_design, y_data)
 
 # # Extract results
 # #================
-cv_results = grid_search.cv_results_
-best_model = grid_search.best_estimator_
+# cv_results = grid_search.cv_results_
+# best_model = grid_search.best_estimator_
+# rERP_model.coef_ = best_model.coef_
 
-rERP_model.coef_ = best_model.coef_
-rERP_model.plot_coefs()
-
+fig = rERP_model.plot_coefs()
+plt.show()
 
 # rERP_model.coef_.shape
 # rERP_model.plot_coefs()

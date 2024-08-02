@@ -6,6 +6,7 @@ from scipy.sparse import hstack
 import numbers
 from .utils.pydeconv_functions import add_spline_features
 from .utils.plot_general import plot_model_results
+from mne.decoding import get_coef
 
 
 class PyDeconv(BaseEstimator):
@@ -43,7 +44,20 @@ class PyDeconv(BaseEstimator):
             self.estimator = Ridge()
         self.estimator = 0.0 if settings['solver'] is None else self.estimator
        # Print the class attributes and model description
+        if self.interactions is None:
+            interactions_list = []
+        else:
+            interactions_list = self.interactions
         self._print_model_info()
+        if self.sd_inter_ev is None or self.sd_inter_ev == []:
+            second_features_list = []
+        else:
+            second_features_list = ['1','2','3','4','5']
+        if   self.intercept: 
+            self.feature_names = ["intercept"] + self.additive_features + interactions_list + second_features_list
+        else:
+            self.feature_names =  self.additive_features + interactions_list + second_features_list
+            
                 
     def _print_model_info(self):
         print("\n" + "="*40)
@@ -154,19 +168,19 @@ class PyDeconv(BaseEstimator):
         else:
             if type(self.feature_names) is list:
                 n_predictors =  len(self.feature_names)
-                print('features names len',n_predictors)
+                # print('features names len',n_predictors)
             elif type(self.feature_names) is str:
                 n_predictors =  1
 
         if n_delays2 is None:
-            print(f'features times delays {(n_predictors+1)*n_delays } \n  n_feats {n_feats}')
-            if (self.feature_names is not None) and (( n_predictors+1)*n_delays != n_feats):
+            # print(f'features times delays {(n_predictors+1)*n_delays } \n  n_feats {n_feats}')
+            if (self.feature_names is not None) and (( n_predictors)*n_delays != n_feats):
                 raise ValueError(
                     "n_features in X does not match feature names "
-                    "(%s != %s)" % (n_feats, 42) 
+                    "(%s != %s)" % (n_feats, ( n_predictors)*n_delays ) 
                 )
         else:
-            print(f'features times delays {(n_predictors)*n_delays+ n_delays2 } \n  n_feats {n_feats}')
+            # print(f'features times delays {(n_predictors)*n_delays+ n_delays2 } \n  n_feats {n_feats}')
 
         # Update feature names if we have none
         #print('n pred +1',(n_predictors+1)*n_delays ,'n feats',n_feats)
@@ -182,7 +196,7 @@ class PyDeconv(BaseEstimator):
 
             self.estimator_.fit(X, y)
             coef = get_coef(self.estimator_, "coef_")  # (n_targets, n_features)
-            shape = [chns, n_delays*(n_predictors+1)]#change the harcoded chans number later.
+            shape = [chns, n_delays*(n_predictors)]#change the harcoded chans number later.
         
             self.coef_ = coef.reshape(shape)
 
@@ -323,7 +337,7 @@ class PyDeconv(BaseEstimator):
         return concatenated_matrix[non_zero_rows]
 
     def plot_coefs(self):
-        list_of_coeffs = []
+        list_of_coeffs = self.feature_names[:-4]
         plot_model_results(self,list_of_coeffs, figsize=[10,5],top_topos=True)
 
     
@@ -335,21 +349,6 @@ def _times_to_samples(tmin, tmax, sfreq):
 
 
 
-
-# def _times_to_delays(tmin, tmax, sfreq):
-#     """Convert a tmin/tmax in seconds to delays."""
-#     # Convert seconds to samples
-#     delays = np.arange(int(np.round(tmin * sfreq)), int(np.round(tmax * sfreq) + 1))
-#     return delays
-
-
-# def _delays_to_slice(delays):
-#     """Find the slice to be taken in order to remove missing values."""
-#     # Negative values == cut off rows at the end
-#     min_delay = None if delays[-1] <= 0 else delays[-1]
-#     # Positive values == cut off rows at the end
-#     max_delay = None if delays[0] >= 0 else delays[0]
-#     return slice(min_delay, max_delay)
 def closest_indices(arr1, arr2):
     closest_indices = np.empty_like(arr2, dtype=np.intp)
 

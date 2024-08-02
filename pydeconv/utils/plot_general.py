@@ -322,7 +322,7 @@ def plot_eye_fix_movements(all_fixations):
     plt.subplots_adjust(wspace=0.3)
     plt.subplots_adjust(hspace=0.3, top=0.4)
 
-def plot_model_results(deconv_model ,list_of_coeffs, figsize=[10,5],top_topos=True):
+def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=True):
     # to use with PyDeconv repo
     import matplotlib.pyplot as plt
     from matplotlib.gridspec import GridSpec
@@ -330,8 +330,8 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[10,5],top_topos=Tr
     import matplotlib.colors as mcolors
     from matplotlib.ticker import FuncFormatter
 
-    vlims = [(-2.3,2.3),(-2.3,2.3),(-2.3,2.3),(-3.5,3.5),(-3.5,3.5)]
-    joint_ylims = dict(eeg=[-3, 3])
+    vlims = [(-4,4),(-4,4),(-10,10),(-4,4),(-6,6)]
+    joint_ylims = dict(eeg=[-4, 4])
     top_slide = 0.02
     horizontal_jump = 0.2
     
@@ -339,15 +339,16 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[10,5],top_topos=Tr
 
     jump=0
     for coeff in list_of_coeffs:
-        data = deconv_model.coef_[:,deconv_model.delays_*coeff:deconv_model.delays_*(coeff+1)]
+        n_coeff = list_of_coeffs.index(coeff)
+        data = deconv_model.coef_[:,deconv_model.delays_*n_coeff:deconv_model.delays_*(n_coeff+1)]
         base_lims = [-.2, 0 ]
         times = np.linspace(deconv_model.tmin,deconv_model.tmax,deconv_model.delays_)
-        eeg = deconv_model.data()
-        info = eeg.pick_channels(eeg.ch_names[:deconv_model.n_chs]).info
+        eeg = deconv_model.data
+        info = eeg.pick_channels(eeg.ch_names[:deconv_model.chans_to_ana]).info
 
         # Create an Evoked object from the data and info
         grand_avg = mne.EvokedArray(data, info,tmin=times[0],baseline=(None, 0), verbose=False)
-        grand_avg[0].nave = None
+        grand_avg.nave = None
 
         if top_topos:
             ax_topo1 = fig.add_axes((0.033+jump*horizontal_jump, 0.75, 0.038, 0.07))
@@ -361,15 +362,15 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[10,5],top_topos=Tr
  
 
         if top_topos:
-            grand_avg[0].plot_joint(title="",ts_args={'xlim': (-.1,.4),'ylim':joint_ylims,'axes':ax_frp,'titles':dict(eeg=''),'window_title':''},
-                                        topomap_args={'vlim':vlims[coeff],'contours':2,'axes':axs_topos,'size':.8},
+            grand_avg.plot_joint(title="",ts_args={'xlim': (-.1,.4),'ylim':joint_ylims,'axes':ax_frp,'titles':dict(eeg=''),'window_title':''},
+                                        topomap_args={'vlim':vlims[n_coeff],'contours':2,'axes':axs_topos,'size':.8},
                                         show=False)
         else:
-            if coeff ==2:
+            if n_coeff ==2:
                 xmax = .85
             else:
                 xmax = .85
-            grand_avg[0].plot(axes=ax_frp,titles=dict(eeg=''),window_title='',xlim= (-.1,xmax),ylim=joint_ylims,
+            grand_avg.plot(axes=ax_frp,titles=dict(eeg=''),window_title='',xlim= (-.1,xmax),ylim=joint_ylims,
                             show=False)
             
 
