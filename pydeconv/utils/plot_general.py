@@ -330,6 +330,8 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
     import matplotlib.colors as mcolors
     from matplotlib.ticker import FuncFormatter
 
+    x_lims = (deconv_model.tmin, deconv_model.tmax)
+    
     vlims = [(-4,4),(-4,4),(-10,10),(-4,4),(-6,6)]
     joint_ylims = dict(eeg=[-4, 4])
     top_slide = 0.02
@@ -362,7 +364,7 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
  
 
         if top_topos:
-            grand_avg.plot_joint(title="",ts_args={'xlim': (-.1,.4),'ylim':joint_ylims,'axes':ax_frp,'titles':dict(eeg=''),'window_title':''},
+            grand_avg.plot_joint(title="",ts_args={'xlim': x_lims,'axes':ax_frp,'titles':dict(eeg=''),'window_title':''},
                                         topomap_args={'vlim':vlims[n_coeff],'contours':2,'axes':axs_topos,'size':.8},
                                         show=False)
         else:
