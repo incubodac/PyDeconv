@@ -19,10 +19,11 @@ class PyDeconv(BaseEstimator):
         eeg
     ):  
         """Initialize the PyDeconv instance with the provided settings, features, and EEG data."""
+        self.settings = settings
         self.model_name = settings['model_name']
         self.fs_inter_ev = settings['first_intercept_event_type']
         self.sd_inter_ev = settings['second_intercept_event_type']
-        self.data = eeg
+        self.eeg = eeg
         self.features = features
         self.sfreq = float(eeg.info['sfreq'])
         self.tmin = settings['tmin']
@@ -235,7 +236,24 @@ class PyDeconv(BaseEstimator):
         """
         return self.estimator_.predict(X)
 
-    
+    def predicted_response(self,X, chans = None):
+        if chans is None:
+            return self.predict(X)
+        else:
+            predicted_data = self.predict(X)
+            return np.transpose(predicted_data)[chans]
+
+
+    def nonzero_data(self,X, chans = None):
+        nzidx = self.non_zero_rows
+        if chans is None:
+            return self.eeg.get_data()[:,nzidx]
+        else:
+            return self.eeg.get_data()[chans][:,nzidx]
+
+
+
+
     def score(self, X, y):
         """Score predictions.
 
@@ -323,7 +341,7 @@ class PyDeconv(BaseEstimator):
             The filtered EEG data.
         """        
         "Not implemented"
-        return self.data
+        return self.eeg
 
     def get_data(self):
         """Get the EEG data from the specified channels.
@@ -334,7 +352,7 @@ class PyDeconv(BaseEstimator):
             The EEG data.
         """        
         n_chs = self.chans_to_ana
-        channel_data = self.data.get_data().T
+        channel_data = self.eeg.get_data().T
         y  = channel_data[:,:n_chs]
         return y
     def get_nonzero_data(self):
@@ -356,7 +374,7 @@ class PyDeconv(BaseEstimator):
         matrix : sparse matrix
             The created design matrix.
         """
-        X = create_design_matrix(self.data,
+        X = create_design_matrix(self.eeg,
                                  self.tmin,
                                  self.tmax,
                                  self.sfreq, 
@@ -372,7 +390,7 @@ class PyDeconv(BaseEstimator):
 
         #for second delay use
         if self.second_delay is True:
-            X_sacc = create_design_matrix(self.data,
+            X_sacc = create_design_matrix(self.eeg,
                                           tmin,
                                           .3,
                                           self.sfreq,
@@ -381,7 +399,7 @@ class PyDeconv(BaseEstimator):
                                           second_intercept_features,
                                           interaction=None)
         if self.second_delay is None:
-            X_sacc = create_design_matrix(self.data,
+            X_sacc = create_design_matrix(self.eeg,
                                           self.tmin,
                                           self.tmax,
                                           self.sfreq,
