@@ -1,47 +1,41 @@
 # PyDeconv
-.. -*- mode: rst -*-
-
 
 PyDeconv
 ==========
 
-PyDeconv is an open-source Python package for empowering neuroimaging with ERP deconvolution for EEG and MEG data.
-It includes modules for create linear models based on experimental features. It is possible to deffine interactions
-and non-linear contributions moled via B-Splines into the models. It is possible to estimate the collinearity between 
-features with the VIF module.
+PyDeconv is an open-source Python package for empowering neuroimaging with ERP deconvolution for EEG and MEG data. It includes modules for creating linear models based on experimental features. You can define interactions and non-linear contributions modeled via B-Splines into the models. Additionally, PyDeconv provides tools to estimate the collinearity between features using the VIF module.
 
+## Documentation
 
-Documentation
-^^^^^^^^^^^^^
+[Documentation](#) for PyDeconv tutorials and examples.
 
-`Documentation`_ for PyDeconv tutorials,
-and examples.
+## Installation
 
-Installation
-^^^^^^^^^^^^
+Follow the installation guide in the documentation to get started with PyDeconv.
 
+## Dependencies
 
+The minimum required dependencies to run PyDeconv examples are:
 
+- [Python](https://www.python.org) ≥ 3.9
+- [MNE](https://mne.tools/stable/index.html) ≥ 1.3.1  
+- [NumPy](https://numpy.org) ≥ 1.24.2
+- [SciPy](https://scipy.org) ≥ 1.10.1
+- [Matplotlib](https://matplotlib.org) ≥ 3.6
+- [Pandas](https://pandas.pydata.org) ≥ 2.1.0
+- [scikit-learn](https://scikit-learn.org) ≥ 1.2.2  
 
-Dependencies
-^^^^^^^^^^^^
+## Use
 
-The minimum required dependencies to run PyDeconv example are:
+The main class `PyDeconv` takes three arguments: 
+1. The parsed configurations from `config.py`, 
+2. A DataFrame labeled as `features` with predictors as columns, 
+3. The EEG data as a `mne` raw object.
 
-- `Python <https://www.python.org>`__ ≥ 3.9
-- `men <https://mne.tools/stable/index.html>`__ ≥ 1.3.1  
-- `NumPy <https://numpy.org>`__ ≥ 1.24.2
-- `SciPy <https://scipy.org>`__ ≥ 1.10.1
-- `Matplotlib <https://matplotlib.org>`__ ≥ 3.6
-- `Pandas <https://pandas.pydata.org>`__ ≥ 2.1.0
-- `scikit-learn <https://scikit-learn.org>`__ ≥ 1.2.2  
+## Example Scripts
 
-Use
-^^^
-The main function takes only two arguments first a Pandas DataFrame keyworded as features indicating the kind 
-of event to be modeledand the features taking part in the model formula as colums. It should look like this:
+### `example_script.py`
+The `example_script.py` script is designed to show some pf the functionalities of the deconvolution models. 
 
-
-![screenshot](https://github.com/user-attachments/assets/38463a3e-358d-4341-8e08-1acfa841b33b)
-
+It also can be use the example_notebook that applied a simple model to a sample dataset. This notebook will run through the process of setting up the deconvolution model, applying it to the data, and printing out the results of the analysis.
 
