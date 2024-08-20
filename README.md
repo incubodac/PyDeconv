@@ -33,7 +33,7 @@ The main class `PyDeconv` takes three arguments:
 ## Example Scripts
 
 ### `example_script.py`
-The `example_script.py` script is designed to show some pf the functionalities of the deconvolution models. 
+The `example_script.py` script is designed to show some of the functionalities of the tool and runs a simple model over the exaple data. 
 
 It also can be use the example_notebook that applied a simple model to a sample dataset. This notebook will run through the process of setting up the deconvolution model, applying it to the data, and printing out the results of the analysis.
 
