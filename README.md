@@ -26,9 +26,10 @@ Installation
 Dependencies
 ^^^^^^^^^^^^
 
-The minimum required dependencies to run MNE-Python are:
+The minimum required dependencies to run PyDeconv example are:
 
 - `Python <https://www.python.org>`__ ≥ 3.9
+- `men <https://mne.tools/stable/index.html>`__ ≥ 1.3.1  
 - `NumPy <https://numpy.org>`__ ≥ 1.24.2
 - `SciPy <https://scipy.org>`__ ≥ 1.10.1
 - `Matplotlib <https://matplotlib.org>`__ ≥ 3.6
