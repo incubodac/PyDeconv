@@ -27,7 +27,7 @@ The minimum required dependencies to run PyDeconv examples are:
 
 The main class `PyDeconv` takes three arguments: 
 1. The parsed configurations from `config.py`, 
-2. A DataFrame labeled as `features` with predictors as columns, 
+2. A DataFrame with columns labeled with event types to model and the features to use as predictors, 
 3. The EEG data as a `mne` raw object.
 
 ## Example Scripts
