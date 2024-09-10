@@ -35,7 +35,7 @@ To use PyDeconv, ensure that the configuration file and data are properly set up
 
 #### `example_script.py`
 
-The `example_script.py` demonstrates basic functionalities of PyDeconv. It applies a simple model to example data, running through the process of setting up the deconvolution model, applying it to the data, and printing out the analysis results.
+The `example_script.py` demonstrates basic functionalities of PyDeconv. It applies a simple model to example data, It takes the configuration parameters from the config.py file , defines the model and fit it to the data, and then prints out the analysis results.
 
 #### Example Notebook
 
