@@ -1,5 +1,6 @@
 import numpy as np 
 from matplotlib import pyplot as plt
+from scipy.stats import skewnorm, uniform
 
 class EEGSimulator:
     def __init__(self, duration, sample_rate):
@@ -8,6 +9,7 @@ class EEGSimulator:
         self.samples = int(duration * sample_rate)
         self.time = np.arange(0, duration, 1/sample_rate)
         self.data = np.zeros(self.time.shape)
+        self._set_isi_count = 0
         # self. = 
         
     def data_stats(self):
@@ -57,7 +59,7 @@ class EEGSimulator:
         axs[1].set_title('Spectral Power')
         plt.show()
 
-    def simulate(self, noise='brown'):
+    def simulate(self, noise='brown',erp_ker=None, isi = {'dist': 'uniform', 'lims': [100,400]} ,add_linear_mod = False):
         """Simulates the EEG data."""
         self.data = np.zeros(self.samples)
         if noise == 'brown':
@@ -66,23 +68,76 @@ class EEGSimulator:
             print('No noise added')
         
         
-        n_responses = 5
+        
+        N = 10
+        isis = []
+        # create array for the number of responses for each condition
+        if erp_ker is None:
+            # default test
+            n_responses = [5,5]
+        if isinstance(erp_ker, dict):
+            count = 0
+            for key in erp_ker.keys():
+                if isinstance(key, int):
+                    count += 1
+            if count >0:
+                # Generate an array of n random values
+                isis = np.empty([count,])
+                random_values = np.random.rand(count)
+                
+                # Scale the array so that the sum is N
+                scaled_values = random_values / random_values.sum() * N
+                
+                    
+                
         # Generate all times, amplitudes, widths, and conditions holistically
-        times = np.random.uniform(0, self.duration, size=n_responses).tolist()
+        # times = np.random.uniform(0, self.duration, size=n_responses[0]).tolist()
         # amplitudes = np.random.uniform(0.5, 1.5, size=n_responses).tolist()
         # widths = np.random.uniform(0.05, 0.2, size=n_responses).tolist()
 
         # Create a conditions_array with random 1s and 0s
-        conditions_array = np.random.choice([0, 1], size=n_responses).tolist()
+        sample_size = 10
+        weight1= .5
+        weight2= .5
+        conditions_array = np.random.choice([0, 1],  size=sample_size, p=[weight1, weight2]).tolist()
+
+        times = []
+        samples = []
+        for choice in conditions_array:
+            if choice == 0:
+                # Retrieve the parameters for ISI_0 (skewnorm)
+                isi_param = getattr(self, f'isi_{0}', None)
+                if isi_param:
+                    skew = isi_param['skew']
+                    mean_shift1 = isi_param['lims'][0]
+                    scale1 = isi_param['scale']
+                    samples.append(skewnorm.rvs(skew, loc=mean_shift1, scale=scale1))
+                else:
+                    raise AttributeError("ISI_0 parameters not set.")
+            elif choice == 1:
+                isi_param = getattr(self, f'isi_{1}', None)
+                if isi_param:
+                    loc2 = isi_param['lims'][0]
+                    scale2 = isi_param['scale']
+                    skew = isi_param['skew']
+                    samples.append(uniform.rvs(loc=loc2, scale=scale2))
+                else:
+                    raise AttributeError("ISI_1 parameters not set.")
+
+        times = np.cumsum(samples)
 
         
         # add onsets to self.onsets
         self.onsets = times
         # add conditions to self.onsets
         self.conditions = conditions_array
-
+        # if add_linear_mod:
+        #     # currently linear modulation is hardcoded to be a truncated gaussian
+        #     # intended to match saccade amplitude values in the linear region (1-3 degs)
+        #     # as signals are in arbitrary units this is just for the sake of 
+        #     mod_feature_values =  
         
-        self.add_neural_responses(times, conditions_array)
+        self.add_neural_responses(times, conditions_array,erp_ker=erp_ker)
 
         return self.data
 
@@ -119,18 +174,84 @@ class EEGSimulator:
 
         self.data += response
     
-    def overlap_score(self):
-        
-        self.onsets 
+    def create_isi_pdf(self, kernel_idx, sample_size, lims=[100, 600], dist_type='uniform', mode=100, skew=0, scale=1):
+        """Create and store ISI PDF parameters."""
+        isi_params = {
+            'type': dist_type,
+            'sample_size': sample_size,
+            'lims': lims,
+            'mode': mode,
+            'skew': skew,
+            'scale': scale
+        }
+        setattr(self, f'isi_{kernel_idx}', isi_params)  # Store ISI parameters dynamically
+
+    def plot_isi_pdf(self, kernel_idx):
+        """Plot the ISI PDF based on the kernel index."""
+        if hasattr(self, f'isi_{kernel_idx}'):
+            print(f"Plotting ISI PDF for kernel {kernel_idx}")
+
+            # Retrieve ISI parameters
+            isi_params = getattr(self, f'isi_{kernel_idx}')
+            lims = isi_params['lims']
+            sample_size = isi_params['sample_size']
+            scale = isi_params['scale']
+            mode = isi_params['mode']
+            skew = isi_params['skew']
+            dist_type = isi_params['type']
+
+            # Generate x values
+            x = np.linspace(lims[0] - 200, lims[1] + 200, sample_size)
+
+            # Generate PDF based on type
+            if dist_type == 'uniform':
+                pdf = uniform.pdf(x, loc=lims[0], scale=lims[1] - lims[0])
+            elif dist_type == 'skewed':
+                pdf = skewnorm.pdf(x, skew, loc=mode, scale=scale)
+            else:
+                raise ValueError(f"Unsupported distribution type: {dist_type}")
+
+            # Plot the PDF
+            plt.plot(x, pdf, label=f'ISI {kernel_idx}')
+            plt.title(f'ISI PDF for kernel {kernel_idx}')
+            plt.xlabel('ISI')
+            plt.ylabel('Probability Density')
+            plt.legend()
+            plt.show()
+        else:
+            print(f"Simulation object does not have an ISI for kernel {kernel_idx}")
+
+# Example usage:
+    # def plot_isi():
+    
+    # # def overlap_score(self):
+    # #     # not implemente yet    
+    # #     self.onsets 
+    
+    # # def get_erp(self,condition = None,baseline = None):
+    # #     if condition is None:
+            
+    # #     return erp_data
+    
+    
 
 if __name__ == '__main__':
     print('Trying EEG Simulation...')
-    sig = EEGSimulator(80, 500)
+    sig = EEGSimulator(8000, 500)
     kernels = {
                 0: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07]},
-                1: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07]}
+                1: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07]},
+                'modulation': {'ker_idx2mod': 1, 'mod': 'linear','dist': 'uniform', 'lims': [100, 600]}
             }
-    # sig.add_modulation()
+    sig.create_isi_pdf(0, sample_size=100, lims=[100, 600], dist_type='skewed', mode=300, skew=2, scale=50)
+    sig.create_isi_pdf(1, sample_size=100, lims=[100, 600], dist_type='uniform')
+    # sig.combine_isi_pdf
+    sig.plot_isi_pdf(0)
+    sig.plot_isi_pdf(1)
     sig.simulate(noise=None)
-    sig.data_stats()
     sig.plot_datanpsd()
+    sig.data_stats()
+
+# terminar ruido con features
+# distribution of onsets and overlaping characterization
+# add continuous modulation
