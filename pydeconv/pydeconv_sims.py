@@ -13,6 +13,7 @@ class EEGSimulator:
         # self. = 
         
     def data_stats(self):
+        """Display basic statistics for the data."""
         median = np.median(self.data)
         mean = np.mean(self.data)
         variance = np.var(self.data)
@@ -31,6 +32,7 @@ class EEGSimulator:
         self.data += noise
         
     def get_psd(self):
+        """Return the Power Spectral Density (PSD) of the data."""
         N = self.samples
         X = np.fft.fft(self.data)/N
         psd = 10 * np.log10(2 * np.abs(X[:int(N/2)+1]) ** 2)
@@ -38,26 +40,43 @@ class EEGSimulator:
         return freq, psd
         
     def plot_datanpsd(self):
+        """Plot the data and its power spectral density."""
         frec, pwr = self.get_psd()
         t = self.time
         fig, axs = plt.subplots(2, 1, figsize=(8, 6), tight_layout=True)
+        
+        # Plot the data signal
         axs[0].plot(t, self.data, lw=0.8)
-        for onset in self.onsets:
-            axs[0].axvline(x=onset, color='r', linestyle='--', label='event')
-
-        # Optional: add a legend
-        axs[0].legend()
+        
+        # Plot vertical lines for each event (different color for each event type)
+        for onset, condition in zip(self.onsets, self.conditions):
+            if condition == 0:
+                axs[0].axvline(x=onset, color='r', linestyle='--', label='ERP 0 (event 0)')
+            elif condition == 1:
+                axs[0].axvline(x=onset, color='b', linestyle='--', label='ERP 1 (event 1)')
+        
+        # Optional: add a legend (only one label per event type)
+        handles, labels = axs[0].get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        axs[0].legend(by_label.values(), by_label.keys())
+        
+        # Set labels and titles for the first plot
         axs[0].set_xlabel('Time (s)')
         axs[0].set_ylabel('Amplitude')
         axs[0].set_title('Data signal')
         
+        # Plot the power spectral density (PSD)
         idx = np.where(frec >= 100)[0][0]
         axs[1].plot(frec[:idx], pwr[:idx], lw=0.8)
+        
+        # Set labels and titles for the second plot
         axs[1].set_xlabel('Frequency (Hz)')
-        axs[1].set_ylim([-100,40])
+        axs[1].set_ylim([-100, 40])
         axs[1].set_ylabel('Power (dB)')
         axs[1].set_title('Spectral Power')
+        
         plt.show()
+
 
     def simulate(self, noise='brown',erp_ker=None, isi = {'dist': 'uniform', 'lims': [100,400]} ,add_linear_mod = False):
         """Simulates the EEG data."""
@@ -174,7 +193,7 @@ class EEGSimulator:
 
         self.data += response
     
-    def create_isi_pdf(self, kernel_idx, sample_size, lims=[100, 600], dist_type='uniform', mode=100, skew=0, scale=1):
+    def create_isi_pdf(self, kernel_idx, sample_size, lims=[.1, .6], dist_type='uniform', mode=.1, skew=0, scale=1):
         """Create and store ISI PDF parameters."""
         isi_params = {
             'type': dist_type,
@@ -201,7 +220,7 @@ class EEGSimulator:
             dist_type = isi_params['type']
 
             # Generate x values
-            x = np.linspace(lims[0] - 200, lims[1] + 200, sample_size)
+            x = np.linspace(lims[0] - .1, lims[1] + .1, sample_size)
 
             # Generate PDF based on type
             if dist_type == 'uniform':
@@ -237,14 +256,14 @@ class EEGSimulator:
 
 if __name__ == '__main__':
     print('Trying EEG Simulation...')
-    sig = EEGSimulator(8000, 500)
+    sig = EEGSimulator(200, 500)
     kernels = {
                 0: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07]},
                 1: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07]},
                 'modulation': {'ker_idx2mod': 1, 'mod': 'linear','dist': 'uniform', 'lims': [100, 600]}
             }
-    sig.create_isi_pdf(0, sample_size=100, lims=[100, 600], dist_type='skewed', mode=300, skew=2, scale=50)
-    sig.create_isi_pdf(1, sample_size=100, lims=[100, 600], dist_type='uniform')
+    sig.create_isi_pdf(0, sample_size=100, lims=[.1, .6], dist_type='skewed', mode=.3, skew=2, scale=.05)
+    sig.create_isi_pdf(1, sample_size=100, lims=[.1, .6], dist_type='uniform')
     # sig.combine_isi_pdf
     sig.plot_isi_pdf(0)
     sig.plot_isi_pdf(1)
