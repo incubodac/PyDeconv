@@ -298,7 +298,7 @@ class EEGSimulator:
         axs[1].set_ylabel('Probability')
         axs[1].set_title(f'ISI distribution for kernel {kernel_idx}')
         
-        plt.show()
+        # plt.show(block=True)
 
         
     def plot_all_responses(self):
@@ -326,19 +326,38 @@ if __name__ == '__main__':
     sig.plot_response_idx(0)
     sig.plot_response_idx(1)
     sig.plot_response_idx(2)
+    plt.show()
     sig.plot_datanpsd()
     sig.data_stats()
     print(sig.evts)
-    # 2. create a MNE raw object
-    # 3. filter it as It was a real data
-    # 4. create ERP 
-
-
+    
+    ########
+    # TODO #
+    ########
+    # 1.1 add linear modulation to one or several kernels, define how events will be chosen
+    # 1.2 
+    # 2. filter it as It was a real data
+    # 4. create ERP make a method to do so 
+    # 5. apply PyDeconv
+    # 6. compare scores on several conditions 
+    #     .Levels of noise 
+    #     . 
+    #     . 
 
 # terminar ruido con features
 # distribution of onsets and overlaping characterization
 # add continuous modulation
 
+###############
+# Notes on SNR#
+###############
+# Shurui 2023 used four measures of SNR (Park(bootstrap), Maidhof, Hammer, M&P)
+# Kristensen 2017 used a way to measure relative potencial relactions SNR(...), 
+# SIR and SAR from "blind sources separation community" this is interesting 
+# because she also measure the overlap with these measures
 
-# Notes on SNR
-
+# Bardy 2014 uses the condition number to estimate the error  from (Conte and Boor 1980)
+# and then uses the intra calss correlation coeffitient ICC to asses the quality of the 
+# convolution.
+# Bardy also study how SOA affects condition number, in ralation to the jitter range 
+########################################################################################
