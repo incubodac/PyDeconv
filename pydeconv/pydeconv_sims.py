@@ -89,34 +89,48 @@ class EEGSimulator:
 
 
 
-    def simulate(self, noise='brown',erp_ker=None, isi = {'dist': 'uniform', 'lims': [100,400]} ,add_linear_mod = False):
+    def simulate(self, noise='brown',erp_ker=None, isi = {'dist': 'uniform', 'lims': [100,400]} ,w_matrix = None ,add_linear_mod = False):
         """Simulates the EEG data."""
         self.data = np.zeros(self.samples)
         if noise == 'brown':
             self.add_brown_noise()
         else:
             print('No noise added')
-        
-    
         # Retrieve all possible conditions from the ERP kernel dictionary
-            if erp_ker is None:
-                raise ValueError("erp_ker dictionary must be provided.")
-        erp_conditions = list(erp_ker.keys())
+        if erp_ker is None:
+            raise ValueError("erp_ker dictionary must be provided.")
+        else:
+            erp_conditions = list(erp_ker.keys())
         ker_erp_idx = [cond for cond in erp_conditions if isinstance(cond, (int, float))]
         weights = [erp_ker[cond]['weight'] for cond in ker_erp_idx]
         # Normalize weights (in case they don't sum to 1)
-        weights = np.array(weights) / np.sum(weights)
+        for i, row in enumerate(w_matrix):
+            w_matrix[i] = np.array(row) / np.sum(row)
+
+        # hardcoded padding
+        left_padding = ker_erp_idx[0]
 
         # Create a conditions_array with random 1s and 0s
-        sample_size = 50
-        # weight1= .5
-        # weight2= .5
-        # conditions_array = np.random.choice([0, 1],  size=sample_size, p=[weight1, weight2]).tolist()
-        conditions_array = np.random.choice(ker_erp_idx, size=sample_size,p= weights).tolist()
+        sample_size = 1200
+
+        # chosing the condition index for the train of responses being generated
+        current_state = 0 
+
+        # Array to hold the sequence of states
+        states_sequence = [current_state]
+
+        # Generate the sequence
+        for _ in range(sample_size - 1):  # Since the initial state is already included
+            # Select next state based on transition probabilities of current state
+            next_state = np.random.choice(ker_erp_idx, p=w_matrix[current_state])
+            # Append the new state to the sequence
+            states_sequence.append(next_state)
+            # Update current state
+            current_state = next_state
 
         times = []
         samples = []
-        for choice in conditions_array:
+        for choice in states_sequence:
             isi_param = getattr(self, f'isi_{choice}', None)
 
             if isi_param:
@@ -134,23 +148,22 @@ class EEGSimulator:
             else:
                 raise AttributeError(f"ISI parameters not set for condition {choice}.")
         
-
+        samples.insert(0,left_padding)
         times = np.cumsum(samples) # latencies for all events
-
         
         # add onsets to self.onsets
-        self.onsets = times
-        self.evts['latencies'] = times
+        self.onsets = times[:-1]
+        self.evts['latencies'] = times[:-1]
         # add conditions to self.onsets
-        self.conditions = conditions_array
-        self.evts['type'] = conditions_array
+        self.conditions = states_sequence
+        self.evts['type'] = states_sequence
         # if add_linear_mod:
         #     # currently linear modulation is hardcoded to be a truncated gaussian
         #     # intended to match saccade amplitude values in the linear region (1-3 degs)
         #     # as signals are in arbitrary units this is just for the sake of 
         #     mod_feature_values =  
         
-        self.add_neural_responses(times, conditions_array,erp_ker=erp_ker)
+        self.add_neural_responses(times, states_sequence,erp_ker=erp_ker)
 
         return self.data
 
@@ -308,28 +321,44 @@ class EEGSimulator:
 if __name__ == '__main__':
     print('Trying EEG Simulation...')
     sig = EEGSimulator(200, 500)
+    # I am changing the 'weight' parameter for a more physiologicallty correlated way of thinking af event, 
+    # which is like transitions between states. Now corresponding changes from one erp kernel to another
+    # jwould be governed by a probability for that transstition to happen W_{12}
+    # first attempt of using a transitions matrix to determine ISI's final check should be to study 
+    # the 1st neightbourt distance distribution and try to reach similarty to empirical results.
+    W_matrix = [[0, 0.45, 0.45, 0.1],[0.9, 0, 0 , .1],[0.9, 0, 0,.1], [.33,.33,.33,0]]
     kernels = {
                 0: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
                 1: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
                 2: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
+                3: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
                 'modulation': {'ker_idx2mod': 1, 'mod': 'linear','dist': 'uniform', 'lims': [100, 600]}
             }
+    
+    sig.create_isi_pdf(0, sample_size=100, lims=[.01, .15], dist_type='skewed', mode=.05, skew=0, scale=.01)
+    sig.create_isi_pdf(1, sample_size=100, lims=[.1, .6], dist_type='skewed', mode=.3, skew=2, scale=.05)
     sig.create_isi_pdf(2, sample_size=100, lims=[.1, .6], dist_type='skewed', mode=.3, skew=2, scale=.05)
-    sig.create_isi_pdf(0, sample_size=100, lims=[.1, .6], dist_type='skewed', mode=.3, skew=2, scale=.05)
-    sig.create_isi_pdf(1, sample_size=100, lims=[.1, .6], dist_type='uniform')
+    sig.create_isi_pdf(3, sample_size=100, lims=[.1, .6], dist_type='uniform')
     # sig.combine_isi_pdf
     # sig.plot_isi_pdf(0)
     # sig.plot_isi_pdf(1)
 
 
-    sig.simulate(noise=None,erp_ker=kernels)
+    sig.simulate(noise=None,erp_ker=kernels,w_matrix=W_matrix)
     sig.plot_response_idx(0)
     sig.plot_response_idx(1)
     sig.plot_response_idx(2)
     plt.show()
     sig.plot_datanpsd()
     sig.data_stats()
+    sig.evts['latencies'].diff().hist(bins=50)
+    plt.show()
     print(sig.evts)
+    
+    
+    
+    
+    
     
     ########
     # TODO #
@@ -355,6 +384,8 @@ if __name__ == '__main__':
 # Kristensen 2017 used a way to measure relative potencial relactions SNR(...), 
 # SIR and SAR from "blind sources separation community" this is interesting 
 # because she also measure the overlap with these measures
+# Burns, Makeig 2013 used SNR and ROV (read more)
+# Ozcam 2006 SNR_amp
 
 # Bardy 2014 uses the condition number to estimate the error  from (Conte and Boor 1980)
 # and then uses the intra calss correlation coeffitient ICC to asses the quality of the 
