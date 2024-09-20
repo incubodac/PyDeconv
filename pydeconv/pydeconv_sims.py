@@ -152,8 +152,8 @@ class EEGSimulator:
         times = np.cumsum(samples) # latencies for all events
         
         # add onsets to self.onsets
-        self.onsets = times[:-1]
-        self.evts['latencies'] = times[:-1]
+        self.onsets = times[:-1]*self.sample_rate
+        self.evts['latencies'] = times[:-1]*self.sample_rate
         # add conditions to self.onsets
         self.conditions = states_sequence
         self.evts['type'] = states_sequence

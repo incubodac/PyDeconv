@@ -1,13 +1,13 @@
 # config.py
 
 events_of_interest = {
-    "first_intercept_event_type": "1",
-    "second_intercept_event_type": "0",
+    "first_intercept_event_type": 1,
+    "second_intercept_event_type": 0,
     "second_delay": None
 }
 
 model = {
-    "model_name": "targMin",
+    "model_name": "testingSims",
     "formula": "y ~  1 + effect ", 
     "second_formula": "y ~ 1 ",
     "tmin": -0.2,
