@@ -15,7 +15,7 @@ model = {
     "use_splines": 5,
     "solver": "ridge",
     "scoring": "rms",
-    "second_delay": None ,
+    "second_delay": None,
     "eeg_chns": 64
 }
 
