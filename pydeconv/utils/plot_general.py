@@ -372,7 +372,7 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
                 xmax = .85
             else:
                 xmax = .85
-            grand_avg.plot(axes=ax_frp,titles=dict(eeg=''),window_title='',xlim= (-.1,xmax),ylim=joint_ylims,
+            grand_avg.plot(axes=ax_frp,titles=dict(eeg=''),window_title='',xlim= x_lims,
                             show=False)
             
 

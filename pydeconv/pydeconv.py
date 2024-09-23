@@ -387,6 +387,7 @@ class PyDeconv(BaseEstimator):
             second_intercept_events_metadata, second_intercept_features = add_spline_features(self.features)
         else:
             second_intercept_features = None
+            second_intercept_events_metadata = self.features.loc[self.features.type == self.sd_inter_ev] 
 
         #for second delay use
         if self.second_delay is True:
@@ -419,11 +420,11 @@ class PyDeconv(BaseEstimator):
         self.non_zero_rows = non_zero_rows
         return concatenated_matrix[non_zero_rows]
 
-    def plot_coefs(self):
+    def plot_coefs(self, top_topos = True):
         """Plot the coefficients of the fitted model.
         """
         list_of_coeffs = self.feature_names[:-4]
-        plot_model_results(self,list_of_coeffs, figsize=[10,5],top_topos=True)
+        plot_model_results(self,list_of_coeffs, figsize=[10,5],top_topos= top_topos)
 
     
 def _times_to_samples(tmin, tmax, sfreq):

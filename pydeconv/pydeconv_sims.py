@@ -149,11 +149,11 @@ class EEGSimulator:
                 raise AttributeError(f"ISI parameters not set for condition {choice}.")
         
         samples.insert(0,left_padding)
-        times = np.cumsum(samples) # latencies for all events
+        times = np.cumsum(samples) # latency for all events
         
         # add onsets to self.onsets
         self.onsets = times[:-1]*self.sample_rate
-        self.evts['latencies'] = times[:-1]*self.sample_rate
+        self.evts['latency'] = times[:-1]*self.sample_rate
         # add conditions to self.onsets
         self.conditions = states_sequence
         self.evts['type'] = states_sequence
@@ -351,7 +351,7 @@ if __name__ == '__main__':
     plt.show()
     sig.plot_datanpsd()
     sig.data_stats()
-    sig.evts['latencies'].diff().hist(bins=50)
+    sig.evts['latency'].diff().hist(bins=50)
     plt.show()
     print(sig.evts)
     
