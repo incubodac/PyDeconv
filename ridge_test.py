@@ -1,60 +1,72 @@
 import torch
-from torch import nn
-import torch.nn.functional as F
+import torch.optim as optim
+from sklearn.linear_model import Ridge as SklearnRidge
+import matplotlib.pyplot as plt
+import numpy as np
 
 class Ridge:
-    def __init__(self, alpha=0, fit_intercept=True, device=None):
+    def __init__(self, alpha=1.0, fit_intercept=True, batch_size=32, device='cpu'):
         self.alpha = alpha
         self.fit_intercept = fit_intercept
-        
-        # Check for device: MPS for Macs with Metal, CUDA for GPUs, else CPU
-        if device:
-            self.device = device
-        elif torch.backends.mps.is_available():
-            self.device = 'mps'  # Metal Performance Shaders (MPS) on macOS
-        elif torch.cuda.is_available():
-            self.device = 'cuda'
-        else:
-            self.device = 'cpu'
-        
-    def fit(self, X: torch.tensor, y: torch.tensor) -> None:
-        # Move data to the specified device
-        X = X.to(self.device).rename(None)
-        y = y.to(self.device).rename(None).view(-1, 1)
-        assert X.shape[0] == y.shape[0], "Number of X and y rows don't match"
-        
+        self.batch_size = batch_size
+        self.device = device
+        self.w = None
+        self.b = None
+
+    def fit(self, X, y, epochs=1000, lr=0.01):
+        n_samples, n_features = X.shape
+        self.w = torch.randn(n_features, 1, requires_grad=True, device=self.device)
         if self.fit_intercept:
-            X = torch.cat([torch.ones(X.shape[0], 1, device=self.device), X], dim=1)
-        
-        # Solving X*w = y with Normal equations:
-        # X^{T}*X*w = X^{T}*y 
-        lhs = X.T @ X
-        rhs = X.T @ y
-        
-        if self.alpha == 0:
-            self.w = torch.linalg.lstsq(lhs, rhs).solution
-        else:
-            ridge = self.alpha * torch.eye(lhs.shape[0], device=self.device)
-            self.w = torch.linalg.lstsq(lhs + ridge, rhs).solution
-            
-    def predict(self, X: torch.tensor) -> torch.tensor:
-        # Move input to the specified device
-        X = X.to(self.device).rename(None)
-        if self.fit_intercept:
-            X = torch.cat([torch.ones(X.shape[0], 1, device=self.device), X], dim=1)
-        return X @ self.w
+            self.b = torch.randn(1, requires_grad=True, device=self.device)
+
+        optimizer = optim.SGD([self.w] + ([self.b] if self.fit_intercept else []), lr=lr)
+
+        for epoch in range(epochs):
+            for i in range(0, n_samples, self.batch_size):
+                X_batch = X[i:i + self.batch_size]
+                y_batch = y[i:i + self.batch_size]
+                predictions = self.model(X_batch)
+                loss = self.loss(predictions, y_batch)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+    def model(self, x):
+        return x @ self.w + (self.b if self.fit_intercept else 0)
+
+    def loss(self, predictions, y):
+        mse_loss = torch.mean((predictions - y) ** 2)
+        ridge_penalty = self.alpha * torch.sum(self.w ** 2)
+        return mse_loss + ridge_penalty
+
+    def predict(self, X):
+        return self.model(X).detach().cpu().numpy()
 
 if __name__ == "__main__":
-    # Demo
-    if torch.cuda.is_available():
-        device = 'cuda'
-    else:
-        device = 'cpu'
-    
-    X = torch.randn(100, 3).to(device)
-    y = torch.randn(100, 1).to(device)  # Supports only single outputs
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    model = Ridge(alpha=1e-3, fit_intercept=True, device=device)
-    model.fit(X, y)
-    predictions = model.predict(X)
-    print(predictions)
+    # Generate synthetic data
+    X_torch = torch.randn(1300, 100).to(device)
+    y_torch = torch.randn(1300, 1).to(device)
+
+    # PyTorch Ridge Model
+    torch_ridge = Ridge(alpha=1e-3, fit_intercept=True, device=device)
+    torch_ridge.fit(X_torch, y_torch, epochs=100, lr=0.01)
+    torch_predictions = torch_ridge.predict(X_torch)
+
+    # Sklearn Ridge Model
+    X_sklearn = X_torch.cpu().numpy()
+    y_sklearn = y_torch.cpu().numpy().ravel()
+    sklearn_ridge = SklearnRidge(alpha=1e-3, fit_intercept=True)
+    sklearn_ridge.fit(X_sklearn, y_sklearn)
+    sklearn_predictions = sklearn_ridge.predict(X_sklearn)
+
+    # Plotting results
+    plt.figure(figsize=(10, 5))
+    plt.plot(torch_predictions[:100], label="PyTorch Predictions", color="blue")
+    plt.plot(sklearn_predictions[:100], label="Sklearn Predictions", color="orange", linestyle="dashed")
+    plt.xlabel("Sample index")
+    plt.ylabel("Prediction")
+    plt.title("Comparison of Ridge Regression Predictions")
+    plt.legend()
+    plt.show()
