@@ -330,7 +330,9 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
     import matplotlib.colors as mcolors
     from matplotlib.ticker import FuncFormatter
 
-    vlims = [(-4,4),(-4,4),(-10,10),(-4,4),(-6,6)]
+    x_lims = (deconv_model.tmin, deconv_model.tmax)
+    
+    vlims = [(-5,5)]*len(list_of_coeffs)
     joint_ylims = dict(eeg=[-4, 4])
     top_slide = 0.02
     horizontal_jump = 0.2
@@ -343,7 +345,7 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
         data = deconv_model.coef_[:,deconv_model.delays_*n_coeff:deconv_model.delays_*(n_coeff+1)]
         base_lims = [-.2, 0 ]
         times = np.linspace(deconv_model.tmin,deconv_model.tmax,deconv_model.delays_)
-        eeg = deconv_model.data
+        eeg = deconv_model.eeg
         info = eeg.pick_channels(eeg.ch_names[:deconv_model.chans_to_ana]).info
 
         # Create an Evoked object from the data and info
@@ -362,7 +364,7 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
  
 
         if top_topos:
-            grand_avg.plot_joint(title="",ts_args={'xlim': (-.1,.4),'ylim':joint_ylims,'axes':ax_frp,'titles':dict(eeg=''),'window_title':''},
+            grand_avg.plot_joint(title="",ts_args={'xlim': x_lims,'axes':ax_frp,'titles':dict(eeg=''),'window_title':''},
                                         topomap_args={'vlim':vlims[n_coeff],'contours':2,'axes':axs_topos,'size':.8},
                                         show=False)
         else:
@@ -370,7 +372,7 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
                 xmax = .85
             else:
                 xmax = .85
-            grand_avg.plot(axes=ax_frp,titles=dict(eeg=''),window_title='',xlim= (-.1,xmax),ylim=joint_ylims,
+            grand_avg.plot(axes=ax_frp,titles=dict(eeg=''),window_title='',xlim= x_lims,
                             show=False)
             
 

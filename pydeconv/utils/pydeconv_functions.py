@@ -198,21 +198,22 @@ def parse_wilkinson_formula(formula):
         "additive_features": list(additive_features)}
 
 
-def analyze_data():
+def analyze_data(custom_config = None):
+    active_config = custom_config if custom_config else config
     # Accessing configuration settings
-    first_intercept_ev = config.events_of_interest['first_intercept_event_type']
-    second_intercept_ev = config.events_of_interest['second_intercept_event_type']
-    second_delay = config.events_of_interest['second_delay']
+    first_intercept_ev = active_config.events_of_interest['first_intercept_event_type']
+    second_intercept_ev = active_config.events_of_interest['second_intercept_event_type']
+    second_delay = active_config.events_of_interest['second_delay']
     
-    model_name = config.model['model_name']
-    formula = config.model['formula']
-    tmin = config.model['tmin']
-    tmax = config.model['tmax']
-    use_splines = config.model['use_splines']
-    # alpha = config.model['alpha']
-    solver = config.model['solver']
+    model_name = active_config.model['model_name']
+    formula = active_config.model['formula']
+    tmin = active_config.model['tmin']
+    tmax = active_config.model['tmax']
+    use_splines = active_config.model['use_splines']
+    # alpha = active_config.model['alpha']
+    solver = active_config.model['solver']
     parsed_formula = parse_wilkinson_formula(formula)
-    eeg_chns = config.model['eeg_chns']
+    eeg_chns = active_config.model['eeg_chns']
     
     # Example use of these settings in your analysis
     print(f"Analyzing data with model: {model_name}")

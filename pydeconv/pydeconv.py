@@ -10,15 +10,20 @@ from mne.decoding import get_coef
 
 
 class PyDeconv(BaseEstimator):
+    """
+    A class for deconvolution analysis of EEG data using a variety of linear regression models.
+    """ 
     def __init__(self,
         settings,
         features,
         eeg
     ):  
+        """Initialize the PyDeconv instance with the provided settings, features, and EEG data."""
+        self.settings = settings
         self.model_name = settings['model_name']
         self.fs_inter_ev = settings['first_intercept_event_type']
         self.sd_inter_ev = settings['second_intercept_event_type']
-        self.data = eeg
+        self.eeg = eeg
         self.features = features
         self.sfreq = float(eeg.info['sfreq'])
         self.tmin = settings['tmin']
@@ -60,6 +65,7 @@ class PyDeconv(BaseEstimator):
             
                 
     def _print_model_info(self):
+        """Print model information and configuration details."""        
         print("\n" + "="*40)
         print(f"Model Name: {self.model_name}")
         print(f"First Intercept Event Type: {self.fs_inter_ev}")
@@ -74,7 +80,8 @@ class PyDeconv(BaseEstimator):
         print("="*40 + "\n")
 
 
-    def __repr__(self):  
+    def __repr__(self):
+        """Generate a string representation of the PyDeconv instance."""  
         s = "tmin, tmax : (%.3f, %.3f), " % (self.tmin, self.tmax)
         estimator = self.estimator
         if not isinstance(estimator, str):
@@ -215,12 +222,38 @@ class PyDeconv(BaseEstimator):
         return self
     
     def predict(self, X):
-        # Implement the prediction logic for your estimator
-        # X: array-like, shape (n_samples, n_features)
-        # Your prediction code here
+        """Predict using the trained estimator.
+
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_features)
+            The input features for the model.
+
+        Returns
+        -------
+        predictions : array, shape (n_samples,)
+            The predicted values.
+        """
         return self.estimator_.predict(X)
 
-    
+    def predicted_response(self,X, chans = None):
+        if chans is None:
+            return self.predict(X)
+        else:
+            predicted_data = self.predict(X)
+            return np.transpose(predicted_data)[chans]
+
+
+    def nonzero_data(self,X, chans = None):
+        nzidx = self.non_zero_rows
+        if chans is None:
+            return self.eeg.get_data()[:,nzidx]
+        else:
+            return self.eeg.get_data()[chans][:,nzidx]
+
+
+
+
     def score(self, X, y):
         """Score predictions.
 
@@ -259,6 +292,22 @@ class PyDeconv(BaseEstimator):
         return scores
     
     def _check_dimensions(self, X, y, predict=False):
+        """Check the dimensions of the input and output arrays.
+
+        Parameters
+        ----------
+        X : array
+            The input features.
+        y : array
+            The output features.
+        predict : bool
+            Whether this is a check for prediction.
+
+        Returns
+        -------
+        X, y, X_dim, y_dim : tuple
+            The checked dimensions.
+        """        
         X_dim = X.ndim
         y_dim = y.ndim if y is not None else 0
         if X_dim != 2:           
@@ -279,19 +328,53 @@ class PyDeconv(BaseEstimator):
         return X, y, X_dim, y_dim
     
     def get_filtered_data(self,  thr = 300 ):
+        """Get filtered EEG data with artifacts removed.
+
+        Parameters
+        ----------
+        thr : int
+            Threshold value for artifact detection.
+
+        Returns
+        -------
+        data : array
+            The filtered EEG data.
+        """        
         "Not implemented"
-        return self.data
+        return self.eeg
 
     def get_data(self):
+        """Get the EEG data from the specified channels.
+
+        Returns
+        -------
+        y : array
+            The EEG data.
+        """        
         n_chs = self.chans_to_ana
-        channel_data = self.data.get_data().T
+        channel_data = self.eeg.get_data().T
         y  = channel_data[:,:n_chs]
         return y
     def get_nonzero_data(self):
+        """Get the non-zero rows of the EEG data.
+
+        Returns
+        -------
+        y : array
+            The non-zero EEG data.
+        """        
         y = self.get_data()
         return y[self.non_zero_rows]
+    
     def create_matrix(self):
-        X = create_design_matrix(self.data,
+        """Create the design matrix for the regression model.
+
+        Returns
+        -------
+        matrix : sparse matrix
+            The created design matrix.
+        """
+        X = create_design_matrix(self.eeg,
                                  self.tmin,
                                  self.tmax,
                                  self.sfreq, 
@@ -304,10 +387,11 @@ class PyDeconv(BaseEstimator):
             second_intercept_events_metadata, second_intercept_features = add_spline_features(self.features)
         else:
             second_intercept_features = None
+            second_intercept_events_metadata = self.features.loc[self.features.type == self.sd_inter_ev] 
 
         #for second delay use
         if self.second_delay is True:
-            X_sacc = create_design_matrix(self.data,
+            X_sacc = create_design_matrix(self.eeg,
                                           tmin,
                                           .3,
                                           self.sfreq,
@@ -316,7 +400,7 @@ class PyDeconv(BaseEstimator):
                                           second_intercept_features,
                                           interaction=None)
         if self.second_delay is None:
-            X_sacc = create_design_matrix(self.data,
+            X_sacc = create_design_matrix(self.eeg,
                                           self.tmin,
                                           self.tmax,
                                           self.sfreq,
@@ -336,20 +420,50 @@ class PyDeconv(BaseEstimator):
         self.non_zero_rows = non_zero_rows
         return concatenated_matrix[non_zero_rows]
 
-    def plot_coefs(self):
+    def plot_coefs(self, top_topos = True):
+        """Plot the coefficients of the fitted model.
+        """
         list_of_coeffs = self.feature_names[:-4]
-        plot_model_results(self,list_of_coeffs, figsize=[10,5],top_topos=True)
+        plot_model_results(self,list_of_coeffs, figsize=[10,5],top_topos= top_topos)
 
     
 def _times_to_samples(tmin, tmax, sfreq):
-    """Convert a tmin/tmax in seconds to samples."""
-    # Convert seconds to samples
+    """Convert a tmin/tmax in seconds to samples.
+
+    Parameters
+    ----------
+    tmin : float
+        Start time in seconds.
+    tmax : float
+        End time in seconds.
+    sfreq : float
+        Sampling frequency.
+
+    Returns
+    -------
+    samples : array
+        Sample indices.
+    """  
     smp_ix = np.arange(int(np.round(tmin * sfreq)), int(np.round(tmax * sfreq) + 1))
     return smp_ix
 
 
 
 def closest_indices(arr1, arr2):
+    """Find the indices in arr1 closest to each value in arr2.
+
+    Parameters
+    ----------
+    arr1 : array
+        The array to search within.
+    arr2 : array
+        The array of values to find closest indices for.
+
+    Returns
+    -------
+    closest_indices : array
+        Indices in arr1 closest to each value in arr2.
+    """
     closest_indices = np.empty_like(arr2, dtype=np.intp)
 
     # Iterate over the values in arr2.
@@ -361,7 +475,33 @@ def closest_indices(arr1, arr2):
 
 
 def create_design_matrix(raw,tmin,tmax,sr,events,intercept_evt, feature_cols,interaction=None):
-    #building design matrix from scratch
+    """Create the design matrix for the regression model.
+
+    Parameters
+    ----------
+    raw : instance of Raw
+        The raw EEG data.
+    tmin : float
+        Start time for the time window.
+    tmax : float
+        End time for the time window.
+    sr : float
+        Sampling rate.
+    events : DataFrame
+        The events dataframe.
+    intercept_evt : str
+        The event type to use as intercept.
+    feature_cols : list of str
+        The columns to use as features.
+    interaction : list of str
+        Interaction terms to include.
+
+    Returns
+    -------
+    X_sparse : sparse matrix
+        The design matrix.
+    """
+
     from scipy.sparse import csr_matrix
     #modify this to yield 0 pred for empty 1 for str and num of elements for a list
     if feature_cols==None:
@@ -420,7 +560,22 @@ def create_design_matrix(raw,tmin,tmax,sr,events,intercept_evt, feature_cols,int
     return X_sparse
 
 def _delays(tmin, tmax, sfreq):
-    """Convert a tmin/tmax in seconds to delays."""
+    """Convert a tmin/tmax in seconds to delays.
+
+    Parameters
+    ----------
+    tmin : float
+        Start time in seconds.
+    tmax : float
+        End time in seconds.
+    sfreq : float
+        Sampling frequency.
+
+    Returns
+    -------
+    delays : array
+        Delay indices.
+    """
     # Convert seconds to samples
     delays = np.arange(int(np.round(tmin * sfreq)), int(np.round(tmax * sfreq) + 1))
     return delays
@@ -428,6 +583,22 @@ def _delays(tmin, tmax, sfreq):
 
 
 def _r2_score(y_true, y, multioutput=None):
+    """Compute the R^2 score.
+
+    Parameters
+    ----------
+    y_true : array
+        True values.
+    y : array
+        Predicted values.
+    multioutput : str or None
+        Whether to score multiple outputs separately or not.
+
+    Returns
+    -------
+    score : float
+        The R^2 score.
+    """    
     from sklearn.metrics import r2_score
 
     return r2_score(y_true, y, multioutput=multioutput)
