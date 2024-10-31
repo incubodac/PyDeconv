@@ -3,7 +3,7 @@ import torch.optim as optim
 from sklearn.linear_model import Ridge as SklearnRidge
 import matplotlib.pyplot as plt
 import numpy as np
-
+#this version should be updated with the better usin nn layer from torch
 class Ridge:
     def __init__(self, alpha=1.0, fit_intercept=True, batch_size=32, device='cpu'):
         self.alpha = alpha
