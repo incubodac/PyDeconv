@@ -111,7 +111,7 @@ class EEGSimulator:
         left_padding = ker_erp_idx[0]
 
         # Create a conditions_array with random 1s and 0s
-        sample_size = 1200
+        sample_size = 3200
 
         # chosing the condition index for the train of responses being generated
         current_state = 0 
