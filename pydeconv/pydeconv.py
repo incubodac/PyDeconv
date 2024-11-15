@@ -53,11 +53,15 @@ class PyDeconv(BaseEstimator):
             interactions_list = []
         else:
             interactions_list = self.interactions
+            
         self._print_model_info()
         if self.sd_inter_ev is None or self.sd_inter_ev == []:
             second_features_list = []
-        else:
+        elif self.use_splines:
             second_features_list = ['1','2','3','4','5']
+        else:
+            second_features_list = ['sd_intercept']
+            
         if   self.intercept: 
             self.feature_names = ["intercept"] + self.additive_features + interactions_list + second_features_list
         else:
@@ -119,6 +123,10 @@ class PyDeconv(BaseEstimator):
             The instance so you can chain operations.
         """
         from scipy import linalg
+        import time
+        from datetime import timedelta
+
+        start_time = time.time()
 
         if self.scoring not in _SCORERS.keys():
             raise ValueError(
@@ -219,6 +227,8 @@ class PyDeconv(BaseEstimator):
             coef = np.reshape(self.coef_, (n_feats , n_outputs))
   
 
+        self.training_time = time.time() - start_time
+        print(f"\nTraining completed in {timedelta(seconds=self.training_time)}")
         return self
     
     def predict(self, X):
@@ -392,7 +402,7 @@ class PyDeconv(BaseEstimator):
         #for second delay use
         if self.second_delay is True:
             X_sacc = create_design_matrix(self.eeg,
-                                          tmin,
+                                          self.tmin,
                                           .3,
                                           self.sfreq,
                                           second_intercept_events_metadata, 
@@ -423,7 +433,11 @@ class PyDeconv(BaseEstimator):
     def plot_coefs(self, top_topos = True):
         """Plot the coefficients of the fitted model.
         """
-        list_of_coeffs = self.feature_names[:-4]
+        if self.use_splines:
+            list_of_coeffs = self.feature_names[:-4]
+        else:
+            list_of_coeffs = self.feature_names
+        
         plot_model_results(self,list_of_coeffs, figsize=[10,5],top_topos= top_topos)
 
     

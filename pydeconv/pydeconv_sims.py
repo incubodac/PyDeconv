@@ -39,6 +39,7 @@ class EEGSimulator:
         psd = 10 * np.log10(2 * np.abs(X[:int(N/2)+1]) ** 2)
         freq = np.linspace(0, self.sample_rate/2, int(N/2)+1)
         return freq, psd
+    
     def plot_datanpsd(self):
         """Plot the data and its power spectral density."""
         frec, pwr = self.get_psd()  # Get the power spectral density
@@ -111,7 +112,7 @@ class EEGSimulator:
         left_padding = ker_erp_idx[0]
 
         # Create a conditions_array with random 1s and 0s
-        sample_size = 3200
+        sample_size = 5000
 
         # chosing the condition index for the train of responses being generated
         current_state = 0 
