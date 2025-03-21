@@ -16,7 +16,8 @@ class PyDeconv(BaseEstimator):
     def __init__(self,
         settings,
         features,
-        eeg
+        eeg,
+        normalize = False
     ):  
         """Initialize the PyDeconv instance with the provided settings, features, and EEG data."""
         self.settings = settings
@@ -289,7 +290,7 @@ class PyDeconv(BaseEstimator):
 
         # Generate predictions, then reshape so we can mask time
         X, y = self._check_dimensions(X, y, predict=True)[:2]
-        n_times, n_epochs, n_outputs = y.shape
+        n_times, n_outputs = y.shape
         y_pred = self.predict(X)
         y_pred = y_pred[self.valid_samples_]
         y = y[self.valid_samples_]
@@ -300,6 +301,30 @@ class PyDeconv(BaseEstimator):
         assert y.shape == y_pred.shape
         scores = scorer_(y, y_pred, multioutput="raw_values")
         return scores
+    
+    def sk_score(self, X, y):
+        """
+        Returns the score of the fitted model based on the selected estimator.
+
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_features)
+            Input features used for the prediction.
+        y : array-like, shape (n_samples, n_outputs)
+            True target values.
+
+        Returns
+        -------
+        float or array-like
+            The score computed by the estimator. For regressors, this typically
+            returns the \( R^2 \) value.
+        """
+        if not hasattr(self.estimator_, 'score'):
+            raise AttributeError(
+                f"The estimator {type(self.estimator_).__name__} does not support the `score` method."
+            )
+        return self.estimator_.score(X, y)
+
     
     def _check_dimensions(self, X, y, predict=False):
         """Check the dimensions of the input and output arrays.

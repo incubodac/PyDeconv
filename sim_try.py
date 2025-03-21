@@ -1,7 +1,10 @@
-import numpy as np 
+import numpy as np
 from matplotlib import pyplot as plt
 from scipy.stats import skewnorm, uniform
 import pandas as pd
+from scipy.signal import convolve
+
+#work in progress to attempt using convolution to simulate the data
 
 class EEGSimulator:
     def __init__(self, duration, sample_rate):
@@ -12,7 +15,6 @@ class EEGSimulator:
         self.data = np.zeros(self.time.shape)
         self.evts = pd.DataFrame(columns=['latency', 'type', 'categorical', 'continuous'])
 
-        
     def data_stats(self):
         """Display basic statistics for the data."""
         median = np.median(self.data)
@@ -60,7 +62,7 @@ class EEGSimulator:
             color = colors[color_idx]
             
             # Plot the vertical line for this event
-            axs[0].axvline(x=onset/1000, color=color, linestyle='--', label=f'ERP {condition} (event {condition})')
+            axs[0].axvline(x=onset, color=color, linestyle='--', label=f'ERP {condition} (event {condition})')
             
             # Avoid duplicate labels in the legend by adding only once per condition
             if condition not in used_conditions:
@@ -88,45 +90,43 @@ class EEGSimulator:
         
         plt.show()
 
+    def gaussian_response(self, onset, amp, width, short_time=False):
+        """Creates a Gaussian response starting at onset."""
+        times = self.time
+        if short_time is not False:
+            times = short_time
+        mu = onset + 2 * width
+        gaussian = 1 / (width * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((times - mu) / width) ** 2)
+        gaussian *= amp
+        return gaussian
 
-
-    def simulate(self, noise='brown',erp_ker=None, isi = {'dist': 'uniform', 'lims': [100,400]} ,w_matrix = None ,add_linear_mod = False):
+    def simulate(self, noise='brown', erp_ker=None, isi={'dist': 'uniform', 'lims': [100, 400]}, w_matrix=None, add_linear_mod=False):
         """Simulates the EEG data."""
         self.data = np.zeros(self.samples)
         if noise == 'brown':
             self.add_brown_noise()
         else:
             print('No noise added')
-        # Retrieve all possible conditions from the ERP kernel dictionary
+        
         if erp_ker is None:
             raise ValueError("erp_ker dictionary must be provided.")
         else:
             erp_conditions = list(erp_ker.keys())
+        
         ker_erp_idx = [cond for cond in erp_conditions if isinstance(cond, (int, float))]
         weights = [erp_ker[cond]['weight'] for cond in ker_erp_idx]
-        # Normalize weights (in case they don't sum to 1)
+        
         for i, row in enumerate(w_matrix):
             w_matrix[i] = np.array(row) / np.sum(row)
 
-        # hardcoded padding
         left_padding = ker_erp_idx[0]
-
-        # Create a conditions_array with random 1s and 0s
         sample_size = 5000
-
-        # chosing the condition index for the train of responses being generated
-        current_state = 0 
-
-        # Array to hold the sequence of states
+        current_state = 0
         states_sequence = [current_state]
 
-        # Generate the sequence
-        for _ in range(sample_size - 1):  # Since the initial state is already included
-            # Select next state based on transition probabilities of current state
+        for _ in range(sample_size - 1):
             next_state = np.random.choice(ker_erp_idx, p=w_matrix[current_state])
-            # Append the new state to the sequence
             states_sequence.append(next_state)
-            # Update current state
             current_state = next_state
 
         times = []
@@ -149,38 +149,19 @@ class EEGSimulator:
             else:
                 raise AttributeError(f"ISI parameters not set for condition {choice}.")
         
-        samples.insert(0,left_padding)
-        times = np.cumsum(samples) # latency for all events
+        samples.insert(0, left_padding)
+        times = np.cumsum(samples)
         
-        # add onsets to self.onsets
-        self.onsets = times[:-1]*self.sample_rate
-        self.evts['latency'] = times[:-1]*self.sample_rate
-        # add conditions to self.onsets
+        self.onsets = times[:-1] * self.sample_rate
+        self.evts['latency'] = times[:-1] * self.sample_rate
         self.conditions = states_sequence
         self.evts['type'] = states_sequence
-        # if add_linear_mod:
-        #     # currently linear modulation is hardcoded to be a truncated gaussian
-        #     # intended to match saccade amplitude values in the linear region (1-3 degs)
-        #     # as signals are in arbitrary units this is just for the sake of 
-        #     mod_feature_values =  
         
-        self.add_neural_responses(times, states_sequence,erp_ker=erp_ker)
+        self.add_neural_responses_convolution(times[:-1], states_sequence, erp_ker=erp_ker)
 
         return self.data
 
-    def gaussian_response(self, onset, amp, width, short_time= False):
-        """Creates a Gaussian response starting at onset."""
-        times = self.time
-        if short_time is not False:
-            times = short_time
-        mu = onset + 2 * width
-        gaussian = 1 / (width * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((times - mu) / width) ** 2)
-        gaussian *= amp
-        return gaussian
-    
-
-    def add_neural_responses(self, erp_onsets, conditions_array, erp_ker=None):
-        # implement how to  model collinerity 
+    def add_neural_responses_convolution(self, erp_onsets, conditions_array, erp_ker=None):
         if erp_ker is None:
             self.erp_ker = {
                 0: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07]},
@@ -190,38 +171,37 @@ class EEGSimulator:
             self.erp_ker = erp_ker
 
         response = np.zeros(len(self.time))
-        
-        # Ensure conditions_array are integers
         conditions_array = [int(cond) for cond in conditions_array]
 
-        for onset, cond in zip(erp_onsets, conditions_array):
+        for cond in set(conditions_array):
             if cond in self.erp_ker:
+                kernel = np.zeros(len(self.time))
                 for resp in range(len(self.erp_ker[cond]['onsets'])):
-                    resp_onset = self.erp_ker[cond]['onsets'][resp] + onset
+                    resp_onset = self.erp_ker[cond]['onsets'][resp]
                     resp_ampli = self.erp_ker[cond]['amplitudes'][resp]
                     resp_width = self.erp_ker[cond]['widths'][resp]
-                    response += self.gaussian_response(resp_onset, resp_ampli, resp_width)
+                    kernel += self.gaussian_response(resp_onset, resp_ampli, resp_width)
+                
+                for onset in np.array(erp_onsets)[np.array(conditions_array) == cond]:
+                    response += convolve(self.data, kernel, mode='same')
 
         self.data += response
-        
-        
-    def get_neural_response(self, onset, kernel_idx,times):
+
+    def get_neural_response(self, onset, kernel_idx, times):
         """Returns the neural response for a given onset and kernel index."""
         if kernel_idx not in self.erp_ker:
             raise ValueError(f"Kernel index {kernel_idx} not found in ERP kernel.")
         
-        response = np.zeros(500) #It shoulden't be hardcoded
+        response = np.zeros(500)  # It shouldn't be hardcoded
         
-        # Loop through each component of the ERP kernel (e.g., multiple peaks)
         for resp in range(len(self.erp_ker[kernel_idx]['onsets'])):
             resp_onset = self.erp_ker[kernel_idx]['onsets'][resp] + onset
             resp_ampli = self.erp_ker[kernel_idx]['amplitudes'][resp]
             resp_width = self.erp_ker[kernel_idx]['widths'][resp]
-            response += self.gaussian_response(resp_onset, resp_ampli, resp_width,short_time=times)
+            response += self.gaussian_response(resp_onset, resp_ampli, resp_width, short_time=times)
         
         return response
 
-    
     def create_isi_pdf(self, kernel_idx, sample_size, lims=[.1, .6], dist_type='uniform', mode=.1, skew=0, scale=1):
         """Create and store ISI PDF parameters."""
         isi_params = {
@@ -239,7 +219,6 @@ class EEGSimulator:
         if hasattr(self, f'isi_{kernel_idx}'):
             print(f"Plotting ISI PDF for kernel {kernel_idx}")
 
-            # Retrieve ISI parameters
             isi_params = getattr(self, f'isi_{kernel_idx}')
             lims = isi_params['lims']
             sample_size = isi_params['sample_size']
@@ -248,10 +227,8 @@ class EEGSimulator:
             skew = isi_params['skew']
             dist_type = isi_params['dist']
 
-            # Generate x values
             x = np.linspace(lims[0] - .1, lims[1] + .1, sample_size)
 
-            # Generate PDF based on type
             if dist_type == 'uniform':
                 pdf = uniform.pdf(x, loc=lims[0], scale=lims[1] - lims[0])
             elif dist_type == 'skewed':
@@ -259,7 +236,6 @@ class EEGSimulator:
             else:
                 raise ValueError(f"Unsupported distribution type: {dist_type}")
 
-            # Plot the PDF
             plt.plot(x, pdf, label=f'ISI {kernel_idx}')
             plt.title(f'ISI PDF for kernel {kernel_idx}')
             plt.xlabel('ISI')
@@ -274,7 +250,6 @@ class EEGSimulator:
             print(f"None ISI params for kernel {kernel_idx}")
             return
         
-        # Retrieve ISI parameters
         isi_params = getattr(self, f'isi_{kernel_idx}')
         lims = isi_params['lims']
         sample_size = isi_params['sample_size']
@@ -283,7 +258,6 @@ class EEGSimulator:
         skew = isi_params['skew']
         dist_type = isi_params['dist']
         
-        # Generate ISI PDF
         x = np.linspace(lims[0] - 0.1, lims[1] + 0.1, sample_size)
         if dist_type == 'uniform':
             pdf = uniform.pdf(x, loc=lims[0], scale=lims[1] - lims[0])
@@ -292,32 +266,26 @@ class EEGSimulator:
         else:
             raise ValueError(f"Unsupported distribution type: {dist_type}")
         
-        # Create figure
         fig, axs = plt.subplots(2, 1, figsize=(6, 8), tight_layout=True)
         
-        # Generate the neural response using get_neural_response method
         onset = 2 * self.erp_ker[kernel_idx]['widths'][0]
-        times = np.linspace(-onset,-onset+1,500)
-        neural_response = self.get_neural_response(0,kernel_idx,times)
+        times = np.linspace(-onset, -onset + 1, 500)
+        neural_response = self.get_neural_response(0, kernel_idx, times)
         
-        # Plot the data signal (ERP response)
         axs[0].plot(times, neural_response, lw=0.8)
         axs[0].set_xlabel('Time (s)')
         axs[0].set_ylabel('Amplitude')
         axs[0].set_title(f'ERP response for kernel {kernel_idx}')
         
-        # Plot the ISI probability distribution
         axs[1].plot(x, pdf, lw=0.8)
         axs[1].set_xlabel('Time (s)')
         axs[1].set_ylabel('Probability')
         axs[1].set_title(f'ISI distribution for kernel {kernel_idx}')
         
-        # plt.show(block=True)
+        plt.show()
 
-        
     def plot_all_responses(self):
         print('not implemented')
-        
 
 if __name__ == '__main__':
     print('Trying EEG Simulation...')
@@ -329,7 +297,7 @@ if __name__ == '__main__':
     # the 1st neightbourt distance distribution and try to reach similarty to empirical results.
     W_matrix = [[0, 0.45, 0.45, 0.1],[0.9, 0, 0 , .1],[0.9, 0, 0,.1], [.33,.33,.33,0]]
     kernels = {
-                0: {'onsets': [0, 0.14, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.03, 0.07], 'weight':0.3},
+                0: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
                 1: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
                 2: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
                 3: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
@@ -358,38 +326,3 @@ if __name__ == '__main__':
     
     
     
-    
-    
-    
-    ########
-    # TODO #
-    ########
-    # 1.1 add linear modulation to one or several kernels, define how events will be chosen
-    # 1.2 
-    # 2. filter it as It was a real data
-    # 4. create ERP make a method to do so 
-    # 5. apply PyDeconv
-    # 6. compare scores on several conditions 
-    #     .Levels of noise 
-    #     . 
-    #     . 
-
-# terminar ruido con features
-# distribution of onsets and overlaping characterization
-# add continuous modulation
-
-###############
-# Notes on SNR#
-###############
-# Shurui 2023 used four measures of SNR (Park(bootstrap), Maidhof, Hammer, M&P)
-# Kristensen 2017 used a way to measure relative potencial relactions SNR(...), 
-# SIR and SAR from "blind sources separation community" this is interesting 
-# because she also measure the overlap with these measures
-# Burns, Makeig 2013 used SNR and ROV (read more)
-# Ozcam 2006 SNR_amp
-
-# Bardy 2014 uses the condition number to estimate the error  from (Conte and Boor 1980)
-# and then uses the intra calss correlation coeffitient ICC to asses the quality of the 
-# convolution.
-# Bardy also study how SOA affects condition number, in ralation to the jitter range 
-########################################################################################

@@ -33,17 +33,17 @@ grid_search = GridSearchCV(estimator=solver,
                            param_grid=param_grid, 
                            scoring='neg_mean_squared_error', 
                            cv=kf,verbose=5)
-grid_search.fit(X_design, y_data)
-# rERP_model.estimator.set_params(alpha = 24)
-# rERP_model.fit(X_design, y_data)
+# grid_search.fit(X_design, y_data)
+rERP_model.estimator.set_params(alpha = 24)
+rERP_model.fit(X_design, y_data)
 
 # # Extract results
 # #================
-cv_results = grid_search.cv_results_
-best_model = grid_search.best_estimator_
-rERP_model.coef_ = best_model.coef_
+# cv_results = grid_search.cv_results_
+# best_model = grid_search.best_estimator_
+# rERP_model.coef_ = best_model.coef_
 
-# fig = rERP_model.plot_coefs()
+fig = rERP_model.plot_coefs()
 
 # rERP_model.coef_.shape
 rERP_model.plot_coefs()
