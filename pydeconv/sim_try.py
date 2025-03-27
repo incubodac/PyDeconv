@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.stats import skewnorm, uniform
 import pandas as pd
-from scipy.signal import convolve
+from scipy.signal import convolve , fftconvolve
 
 #work in progress to attempt using convolution to simulate the data
 
@@ -120,7 +120,7 @@ class EEGSimulator:
             w_matrix[i] = np.array(row) / np.sum(row)
 
         left_padding = ker_erp_idx[0]
-        sample_size = 5000
+        sample_size = self.samples//10 # hardcoded for now amount of events to model
         current_state = 0
         states_sequence = [current_state]
 
@@ -139,7 +139,8 @@ class EEGSimulator:
                     skew = isi_param['skew']
                     loc = isi_param['lims'][0]
                     scale = isi_param['scale']
-                    samples.append(skewnorm.rvs(skew, loc=loc, scale=scale))
+                    sample = skewnorm.rvs(skew, loc=loc, scale=scale)
+                    samples.append(max(0, sample))  # Ensure positive value
                 elif isi_param['dist'] == 'uniform':
                     loc = isi_param['lims'][0]
                     scale = isi_param['lims'][1] - loc
@@ -150,57 +151,84 @@ class EEGSimulator:
                 raise AttributeError(f"ISI parameters not set for condition {choice}.")
         
         samples.insert(0, left_padding)
+        cumulative_time = np.cumsum(samples)
+        times = cumulative_time[cumulative_time <= self.duration]
+        states_sequence = states_sequence[:len(times)]
+        self.evts['latency'] = times * self.sample_rate
+        samples.insert(0, left_padding)
         times = np.cumsum(samples)
-        
-        self.onsets = times[:-1] * self.sample_rate
-        self.evts['latency'] = times[:-1] * self.sample_rate
+
+        # Ensure times does not exceed self.duration
+        times = times[times <= self.duration]
+
+        self.onsets = times[:-1] * self.sample_rate # onsets in samples
         self.conditions = states_sequence
         self.evts['type'] = states_sequence
         
-        self.add_neural_responses_convolution(times[:-1], states_sequence, erp_ker=erp_ker)
+        id_kers = [kid for kid in erp_ker.keys() if isinstance(kid, int)]
+        for ker in id_kers:
+            onset = self.onsets[np.array(states_sequence) == ker].astype(int)
+            print(f"Kernel ID: {ker}")
+            print(f"States Sequence: {states_sequence}")
+            print(f"Onsets: {self.onsets}")
+            print(f"Filtered Onsets for Kernel {ker}: {onset}")
+            
+            onset_sticks = np.zeros(len(self.time))
+            if len(onset) > 0:
+                valid_onsets = onset[onset < len(self.time)]  # Ensure onsets are within bounds
+                onset_sticks[valid_onsets] = 1
+            print(f"Onset Sticks for Kernel {ker}: {onset_sticks}")
+            self.add_neural_responses_convolution(onset_sticks, erp_ker=erp_ker)
+
 
         return self.data
 
-    def add_neural_responses_convolution(self, erp_onsets, conditions_array, erp_ker=None):
+    def add_neural_responses_convolution(self, erp_onsets, erp_ker=None):
         if erp_ker is None:
             self.erp_ker = {
                 0: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07]},
                 1: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07]}
-            }
+            }#this is a default kernel but is not properly implemented yet
         else:
             self.erp_ker = erp_ker
 
-        response = np.zeros(len(self.time))
-        conditions_array = [int(cond) for cond in conditions_array]
 
-        for cond in set(conditions_array):
-            if cond in self.erp_ker:
-                kernel = np.zeros(len(self.time))
-                for resp in range(len(self.erp_ker[cond]['onsets'])):
-                    resp_onset = self.erp_ker[cond]['onsets'][resp]
-                    resp_ampli = self.erp_ker[cond]['amplitudes'][resp]
-                    resp_width = self.erp_ker[cond]['widths'][resp]
-                    kernel += self.gaussian_response(resp_onset, resp_ampli, resp_width)
-                
-                for onset in np.array(erp_onsets)[np.array(conditions_array) == cond]:
-                    response += convolve(self.data, kernel, mode='same')
+        for ker_id in [key for key in self.erp_ker.keys() if isinstance(key, int)]:
+            kernel = self.get_neural_response(0, ker_id, self.time)
+            kernel_onset = erp_onsets[erp_onsets == ker_id]
+            print(f"Kernel ID: {ker_id}")
+            print(f"ERP Onsets: {erp_onsets}")
+            print(f"Kernel Onset: {kernel_onset}")
+            
+            if len(kernel_onset) == 0:
+                print(f"Warning: No onsets found for Kernel ID {ker_id}. Skipping convolution.")
+                continue  # Skip this kernel if no onsets are found
 
-        self.data += response
+            response = fftconvolve(kernel, kernel_onset, mode='same')
+            self.data += response
 
     def get_neural_response(self, onset, kernel_idx, times):
-        """Returns the neural response for a given onset and kernel index."""
+        """Compute the neural response for a given onset and kernel index."""
         if kernel_idx not in self.erp_ker:
             raise ValueError(f"Kernel index {kernel_idx} not found in ERP kernel.")
+
+        response = np.zeros_like(times)  # Ensure it has the correct shape
         
-        response = np.zeros(500)  # It shouldn't be hardcoded
+        kernel = self.erp_ker[kernel_idx]
         
-        for resp in range(len(self.erp_ker[kernel_idx]['onsets'])):
-            resp_onset = self.erp_ker[kernel_idx]['onsets'][resp] + onset
-            resp_ampli = self.erp_ker[kernel_idx]['amplitudes'][resp]
-            resp_width = self.erp_ker[kernel_idx]['widths'][resp]
-            response += self.gaussian_response(resp_onset, resp_ampli, resp_width, short_time=times)
-        
+        if len(kernel['onsets']) == 0:
+            print(f"Warning: Kernel {kernel_idx} has no onsets. Returning zero response.")
+            return response  # Ensure it has the correct shape
+
+        for resp_onset, resp_ampli, resp_width in zip(kernel['onsets'], kernel['amplitudes'], kernel['widths']):
+            shifted_onset = resp_onset + onset
+            response += self.gaussian_response(shifted_onset, resp_ampli, resp_width, short_time=times)
+
+        print(f"Generated response shape: {response.shape}")  # Debugging
         return response
+
+
+
 
     def create_isi_pdf(self, kernel_idx, sample_size, lims=[.1, .6], dist_type='uniform', mode=.1, skew=0, scale=1):
         """Create and store ISI PDF parameters."""
