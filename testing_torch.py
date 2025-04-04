@@ -89,14 +89,18 @@ class Ridge:
         self.device = device
         self.loss_history = []
         
-        # Define the nn.Linear layer with the fit_intercept parameter controlling bias
+        # Define the linear model
         self.linear = nn.Linear(input_dim, output_dim, bias=fit_intercept).to(device)
 
     def fit(self, X, y, epochs=1000, lr=0.01):
         n_samples = X.shape[0]
         
-        optimizer = optim.SGD(self.linear.parameters(), lr=lr)
+        # Convert to PyTorch tensors (handling sparse matrices correctly)
+        X = torch.tensor(X.todense(), dtype=torch.float32, device=self.device) if hasattr(X, "todense") else torch.tensor(X, dtype=torch.float32, device=self.device)
+        y = torch.tensor(y, dtype=torch.float32, device=self.device)
 
+        # optimizer = optim.Adam(self.linear.parameters(), lr=lr)
+        optimizer = optim.SGD(self.linear.parameters(), lr=lr, momentum=0.9, weight_decay=self.alpha)
         for epoch in range(epochs):
             indices = torch.randperm(n_samples)
             epoch_loss = 0.0
@@ -104,15 +108,11 @@ class Ridge:
 
             for i in range(0, n_samples, self.batch_size):
                 batch_indices = indices[i:i + self.batch_size]
-                                
-                X_batch = torch.tensor(X[batch_indices].todense(), device=self.device, dtype=torch.float32)
-                y_batch = torch.tensor(y[batch_indices], device=self.device, dtype=torch.float32)
+                X_batch = X[batch_indices]
+                y_batch = y[batch_indices]
 
-
-
-                # Forward pass using the nn.Linear layer
                 predictions = self.model(X_batch)
-                loss = self.loss(predictions, y_batch)
+                loss = self.loss(predictions, y_batch, n_samples)  # Normalize by samples
                 epoch_loss += loss.item()
 
                 optimizer.zero_grad()
@@ -121,18 +121,20 @@ class Ridge:
 
             avg_loss = epoch_loss / num_batches
             self.loss_history.append(avg_loss)
-            print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+            print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.6f}")
             
 
     def model(self, x):
         return self.linear(x)
 
-    def loss(self, predictions, y):
+    def loss(self, predictions, y, n_samples):
         mse_loss = torch.mean((predictions - y) ** 2)
-        ridge_penalty = self.alpha * torch.sum(self.linear.weight ** 2)
+        # Only regularize weights, not bias
+        ridge_penalty = (self.alpha / n_samples) * torch.sum(self.linear.weight ** 2)
         return mse_loss + ridge_penalty
 
     def predict(self, X):
+        X = torch.tensor(X.todense(), dtype=torch.float32, device=self.device) if hasattr(X, "todense") else torch.tensor(X, dtype=torch.float32, device=self.device)
         return self.model(X).detach().cpu().numpy()
 
     def plot_learning_curve(self):
@@ -164,8 +166,8 @@ y_data   = rERP_model.get_nonzero_data()
 # PyTorch Ridge Model
 # torch_ridge = Ridge(alpha=1e-3, fit_intercept=True, batch_size=1000, device=device)
 # torch_ridge.fit(X_design, y_data, epochs=30, lr=0.01)
-torch_ridge = Ridge(input_dim=X_design.shape[1], output_dim= y_data.shape[1], alpha= 40 , fit_intercept=True, batch_size=6000, device=device)
-torch_ridge.fit(X_design, y_data, epochs=20, lr=0.1)
+torch_ridge = Ridge(input_dim=X_design.shape[1], output_dim= y_data.shape[1], alpha= 40 , fit_intercept=False, batch_size=10000, device=device)
+torch_ridge.fit(X_design, y_data, epochs=100, lr=0.0001)
 
 # Plot learning curve
 torch_ridge.plot_learning_curve()

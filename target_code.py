@@ -6,6 +6,9 @@ from pydeconv import *
 from sklearn.model_selection import KFold, GridSearchCV
 from sklearn.metrics import mean_squared_error
 
+# import matplotlib
+# matplotlib.use("Qt5Agg")  # or "Qt6Agg" depending on your installed version
+# import matplotlib.pyplot as plt
 
 # Load parameter, data and features
 #==================================
@@ -13,6 +16,7 @@ data_path = "./example_data/"
 settings = analyze_data()
 features = pd.read_csv(data_path + "629959_full_metadata.csv") 
 raw     = mne.io.read_raw_eeglab(data_path + "629959_analysis.set", preload=True)
+ 
 
 # Initialize the model
 #=====================

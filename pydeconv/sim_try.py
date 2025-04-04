@@ -178,12 +178,12 @@ class EEGSimulator:
                 valid_onsets = onset[onset < len(self.time)]  # Ensure onsets are within bounds
                 onset_sticks[valid_onsets] = 1
             print(f"Onset Sticks for Kernel {ker}: {onset_sticks}")
-            self.add_neural_responses_convolution(onset_sticks, erp_ker=erp_ker)
+            self.add_neural_responses_convolution(onset_sticks, states_sequence,erp_ker=erp_ker)
 
 
         return self.data
 
-    def add_neural_responses_convolution(self, erp_onsets, erp_ker=None):
+    def add_neural_responses_convolution(self, erp_onsets, states_sequence,erp_ker=None):
         if erp_ker is None:
             self.erp_ker = {
                 0: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07]},
@@ -195,7 +195,7 @@ class EEGSimulator:
 
         for ker_id in [key for key in self.erp_ker.keys() if isinstance(key, int)]:
             kernel = self.get_neural_response(0, ker_id, self.time)
-            kernel_onset = erp_onsets[erp_onsets == ker_id]
+            kernel_onset = erp_onsets[states_sequence == ker_id]
             print(f"Kernel ID: {ker_id}")
             print(f"ERP Onsets: {erp_onsets}")
             print(f"Kernel Onset: {kernel_onset}")

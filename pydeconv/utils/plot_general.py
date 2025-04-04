@@ -373,13 +373,13 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
             else:
                 xmax = .85
             grand_avg.plot(axes=ax_frp,titles=dict(eeg=''),window_title='',xlim= x_lims,
-                            show=False)
+                            show=False,scalings=dict(eeg=1))
             
 
         # clean axis
-        ax_frp.set_xlabel([])
-        ax_frp.set_xticklabels([])
-        ax_frp.set_title('')
+        # ax_frp.set_xlabel([])
+        # ax_frp.set_xticklabels([])
+        # ax_frp.set_title('')
         if top_topos:
             ax_cb = axs_topos[-1]
             ax_cb.set_title(f'$\mu V$')
@@ -388,8 +388,8 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
                 top.title.set_fontsize(10)
                 # top.set_title('')
 
-        fig.set_label('')
-        fig.legends = []
+        # fig.set_label('')
+        # fig.legends = []
 
         ax_frp.set_title('')
     ch = fig.get_children()

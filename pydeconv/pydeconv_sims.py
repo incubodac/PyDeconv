@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.stats import skewnorm, uniform
 import pandas as pd
+from scipy import signal
 
 class EEGSimulator:
     def __init__(self, duration, sample_rate):
@@ -40,9 +41,33 @@ class EEGSimulator:
         freq = np.linspace(0, self.sample_rate/2, int(N/2)+1)
         return freq, psd
     
+    def get_psd_welch(self):
+        """Return the Power Spectral Density (PSD) of the data using Welch's method."""
+        # Define parameters for Welch method
+        # For EEG, common parameters include:
+        # - window length: ~2-4 seconds of data
+        # - overlap: 50% (0.5)
+        window_sec = 2.0  # window length in seconds
+        nperseg = int(window_sec * self.sample_rate)  # window length in samples
+        noverlap = int(nperseg * 0.5)  # 50% overlap
+        
+        # Apply Welch's method
+        freq, psd = signal.welch(
+            self.data,
+            fs=self.sample_rate,
+            window='hann',  # Hann window is commonly used for EEG
+            nperseg=nperseg,
+            noverlap=noverlap,
+            scaling='density'  # 'density' for power spectral density
+        )
+        
+        # Convert to dB scale if needed
+        psd_db = 10 * np.log10(psd)
+        
+        return freq, psd_db
     def plot_datanpsd(self):
         """Plot the data and its power spectral density."""
-        frec, pwr = self.get_psd()  # Get the power spectral density
+        frec, pwr = self.get_psd_welch()  # Get the power spectral density
         t = self.time  # Time array
         fig, axs = plt.subplots(2, 1, figsize=(8, 6), tight_layout=True)
         
@@ -153,6 +178,8 @@ class EEGSimulator:
         times = np.cumsum(samples) # latency for all events
         
         # add onsets to self.onsets
+        # I get times from distributions defined in time units, now I convert to samples
+        # check if the first element is 0
         self.onsets = times[:-1]*self.sample_rate
         self.evts['latency'] = times[:-1]*self.sample_rate
         # add conditions to self.onsets
