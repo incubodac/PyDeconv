@@ -583,8 +583,7 @@ def create_design_matrix(raw,tmin,tmax,sr,events,intercept_evt, feature_cols,int
     evt_lat = evt_lat.values.astype(int)
     features = ['type'] + feature_cols
 
-
-
+# Implement Octavio version.
     for beta in range(n_predictors+1):
         
         j_idx = np.arange(beta*n_samples_window,beta*n_samples_window+n_samples_window)   
