@@ -4,26 +4,78 @@ from scipy.stats import skewnorm, uniform
 import pandas as pd
 from scipy.signal import convolve , fftconvolve
 
-#work in progress to attempt using convolution to simulate the data
+# work in progress to attempt using convolution to simulate the data
 
 class EEGSimulator:
+    """
+    Simulates EEG data with event-related potentials (ERPs) and noise.
+
+    Attributes
+    ----------
+    duration : float
+        Duration of the simulation in seconds.
+    sample_rate : int
+        Sampling rate in Hz.
+    samples : int
+        Number of samples in the simulation.
+    time : numpy.ndarray
+        Time array for the simulation.
+    data : numpy.ndarray
+        Simulated EEG data.
+    evts : pandas.DataFrame
+        DataFrame to store event-related information.
+    onsets : numpy.ndarray or None
+        Onsets of events in samples.
+    conditions : list or None
+        List of event conditions.
+    erp_ker : dict or None
+        Dictionary to store ERP kernel information.
+    isi : dict or None
+        Dictionary to store inter-stimulus interval (ISI) parameters.
+        
+    """
+
     def __init__(self, duration, sample_rate):
+        """
+        Initializes the EEGSimulator with the specified duration and sample rate.
+
+        Parameters
+        ----------
+        duration : float
+            Duration of the simulation in seconds.
+        sample_rate : int
+            Sampling rate in Hz.
+
+        """
         self.duration = duration
         self.sample_rate = sample_rate
-        self.samples = int(duration * sample_rate)
+        self.samples = int(duration * sample_rate) 
         self.time = np.arange(0, duration, 1/sample_rate)
         self.data = np.zeros(self.time.shape)
         self.evts = pd.DataFrame(columns=['latency', 'type', 'categorical', 'continuous'])
+        self.onsets = None
+        self.conditions = None
+        self.erp_ker = None
+        self.isi = None
 
     def data_stats(self):
-        """Display basic statistics for the data."""
+        """
+        Prints basic statistics of the simulated EEG data.
+        """
         median = np.median(self.data)
         mean = np.mean(self.data)
         variance = np.var(self.data)
         print(f'Mean:    {mean} \nMedian:    {median}\nVariance:  {variance}')
         
     def add_brown_noise(self, scale=0.5):
-        """Adds brown noise to the simulated EEG data."""
+        """
+        Adds brown noise to the simulated EEG data.
+
+        Parameters
+        ----------
+        scale : float
+            Scale factor for the noise.
+        """
         noise = np.random.randn(self.samples+1)
         freqs = np.fft.fftfreq(self.samples+1, 1 / self.sample_rate)
         psd = 1 / np.sqrt(np.abs(freqs[1:]))
@@ -35,7 +87,16 @@ class EEGSimulator:
         self.data += noise
         
     def get_psd(self):
-        """Return the Power Spectral Density (PSD) of the data."""
+        """
+        Computes the power spectral density (PSD) of the simulated EEG data.
+        
+        Returns
+        -------
+        freq : numpy.ndarray
+            Frequency array.
+        psd : numpy.ndarray
+            Power spectral density array.
+        """
         N = self.samples
         X = np.fft.fft(self.data)/N
         psd = 10 * np.log10(2 * np.abs(X[:int(N/2)+1]) ** 2)
@@ -43,9 +104,12 @@ class EEGSimulator:
         return freq, psd
     
     def plot_datanpsd(self):
-        """Plot the data and its power spectral density."""
+        """
+        Plots the simulated EEG data and its power spectral density (PSD).
+        """
         frec, pwr = self.get_psd()  # Get the power spectral density
         t = self.time  # Time array
+        
         fig, axs = plt.subplots(2, 1, figsize=(8, 6), tight_layout=True)
         
         # Plot the data signal
@@ -91,10 +155,48 @@ class EEGSimulator:
         plt.show()
 
     def gaussian_response(self, onset, amp, width, short_time=False):
-        """Creates a Gaussian response starting at onset."""
-        times = self.time
-        if short_time is not False:
+        """
+        Computes a Gaussian response function.
+
+        Returns a Gaussian response starting at onset with a given amplitude and width.
+
+        Parameters
+        ----------
+        onset : float
+            Onset time of the response.
+        amp : float
+            Amplitude of the response.
+        width : float
+            Width of the Gaussian response.
+        short_time : bool, optional
+            If True, uses the short time array for the response. Default is False.
+
+        Returns
+        -------
+        numpy.ndarray
+            Gaussian response array.
+
+        """
+        # Check if short_time is provided
+        # and use it if available
+        # else use the full time array
+        # to compute the response
+        if short_time:
             times = short_time
+        else:
+            times = self.time
+        
+        # Compute the Gaussian response
+        # using the formula: A * exp(-((x - mu) / sigma) ** 2)
+        # where A is the amplitude, mu is the mean (onset),
+        # and sigma is the standard deviation (width)
+        # The width parameter is used to control the spread of the Gaussian
+        # response.
+        # The mean (mu) is set to the onset time plus 2 times the width
+        # to ensure the Gaussian is centered around the onset.
+        # The Gaussian response is normalized by dividing by the width
+        # and multiplying by the amplitude.
+        # The response is then scaled by the amplitude.
         mu = onset + 2 * width
         gaussian = 1 / (width * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((times - mu) / width) ** 2)
         gaussian *= amp
@@ -318,7 +420,7 @@ class EEGSimulator:
 if __name__ == '__main__':
     print('Trying EEG Simulation...')
     sig = EEGSimulator(200, 500)
-    # I am changing the 'weight' parameter for a more physiologicallty correlated way of thinking af event, 
+    # I am changing the 'weight' parameter for a more physiologically correlated way of thinking an event, 
     # which is like transitions between states. Now corresponding changes from one erp kernel to another
     # jwould be governed by a probability for that transstition to happen W_{12}
     # first attempt of using a transitions matrix to determine ISI's final check should be to study 
