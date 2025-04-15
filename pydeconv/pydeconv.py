@@ -618,6 +618,59 @@ def _delays(tmin, tmax, sfreq):
     delays = np.arange(int(np.round(tmin * sfreq)), int(np.round(tmax * sfreq) + 1))
     return delays
 
+def kept_idxs(feature_tensor, kernel_size, axis=0):
+    """
+    Get the indices of the interesting samples to estimate the kernel in a vectorized way.
+    Instead of creating individual intervals and merging them in Python loops,
+    we use a difference-array approach:
+      - For each event index, we add +1 at that index, and -1 at index+kernel_size.
+      - Taking the cumulative sum recovers a mask that is positive for indices
+        that fall into at least one window.
+    
+    Parameters:
+    ----------
+    feature_tensor : torch.Tensor
+        A 1D tensor representing the feature (e.g., a binary marker for events).
+    kernel_size : int
+        The size of the kernel (i.e. the window length for each event).
+    axis : int
+        The axis along which to find the indices. Default is 0.
+    
+    Returns:
+    -------
+    kept_indices : list
+        Sorted list of unique indices that fall in the union of all event windows.
+    """
+    # Convert tensor to NumPy (if not already) for efficient vectorized operations.
+    feature_np = feature_tensor.cpu().numpy()
+    
+    # Find indices where feature is nonzero (i.e. event locations)
+    event_idxs = np.nonzero(feature_np)[axis]
+    if len(event_idxs) == 0:
+        return []
+    
+    # Total number of samples
+    L = feature_tensor.shape[axis]
+    
+    # Create a difference array of length L+1
+    diff = np.zeros(L + 1, dtype=np.int32)
+    
+    # For each event, add 1 at the event index
+    np.add.at(diff, event_idxs, 1)
+    
+    # And subtract 1 at index (event index + kernel_size), if within bounds.
+    # Compute the end indices and clip them to L (since diff has length L+1)
+    end_idxs = event_idxs + kernel_size
+    valid_end = end_idxs[end_idxs <= L]
+    np.add.at(diff, valid_end, -1)
+    
+    # Compute the cumulative sum over the difference array to get the window coverage.
+    cumsum = np.cumsum(diff[:-1])
+    
+    # The indices with a positive value are within one or more windows.
+    kept_indices = np.nonzero(cumsum > 0)[0]
+    
+    return kept_indices.tolist()
 
 
 def _r2_score(y_true, y, multioutput=None):
