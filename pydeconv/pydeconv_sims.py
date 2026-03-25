@@ -58,8 +58,8 @@ class EEGSimulator:
             color_idx = condition % len(colors)  # Use modulus to loop through colors if more conditions than colors
             color = colors[color_idx]
             
-            # Plot the vertical line for this event
-            axs[0].axvline(x=onset, color=color, linestyle='--', label=f'ERP {condition} (event {condition})')
+            # Plot the vertical line for this event (convert sample index to seconds)
+            axs[0].axvline(x=onset / self.sample_rate, color=color, linestyle='--', label=f'ERP {condition} (event {condition})')
             
             # Avoid duplicate labels in the legend by adding only once per condition
             if condition not in used_conditions:
