@@ -5,6 +5,21 @@ import pandas as pd
 
 class EEGSimulator:
     def __init__(self, duration, sample_rate):
+        """
+        Initialize the EEGSimulator.
+
+        Args:
+            duration (float): Total duration of the simulated signal in seconds.
+            sample_rate (int): The sampling rate (Hz).
+
+        Attributes:
+            duration (float): Duration of the signal (seconds).
+            sample_rate (int): Sampling rate of the signal (Hz).
+            samples (int): Number of samples in the time series.
+            time (np.ndarray): Array representing the time axis.
+            data (np.ndarray): The simulated EEG data array.
+            evts (pd.DataFrame): DataFrame to store event information.
+        """
         self.duration = duration
         self.sample_rate = sample_rate
         self.samples = int(duration * sample_rate)
@@ -14,24 +29,48 @@ class EEGSimulator:
 
         
     def data_stats(self):
-        """Display basic statistics for the data."""
+        """
+        Display and print basic statistics for the simulated EEG data.
+
+        Prints:
+            Mean, median, and variance of the EEG data.
+        """
         median = np.median(self.data)
         mean = np.mean(self.data)
         variance = np.var(self.data)
         print(f'Mean:    {mean} \nMedian:    {median}\nVariance:  {variance}')
-        
-    def add_brown_noise(self, scale=0.5):
-        """Adds brown noise to the simulated EEG data."""
+
+    def add_noise(self, scale=0.5, noise_type='brown'):
+        """
+        Add noise to the EEG data.
+
+        Args:
+
+            scale (float, optional): Amount by which to scale the generated noise (default=0.5).
+
+        Notes:
+            The generated brown noise is added in-place to self.data.
+        """
         noise = np.random.randn(self.samples+1)
         freqs = np.fft.fftfreq(self.samples+1, 1 / self.sample_rate)
-        psd = 1 / np.sqrt(np.abs(freqs[1:]))
+
+        if noise_type == 'brown':
+            psd = 1 / np.abs(freqs[1:]) ** 2
+        elif noise_type == 'white':
+            psd = 1
+        elif noise_type == 'pink':
+            psd = 1 / np.abs(freqs[1:])
+        else:
+            raise ValueError(f"Unsupported noise type: {noise_type}")
+
         noise = np.fft.fft(noise[1:])
         noise = noise[:len(psd)]
-        noise *= psd
+        noise *= np.sqrt(psd)
         noise = np.real(np.fft.ifft(noise))
         noise *= scale
+
         self.data += noise
-        
+
     def get_psd(self):
         """Return the Power Spectral Density (PSD) of the data."""
         N = self.samples
@@ -39,8 +78,15 @@ class EEGSimulator:
         psd = 10 * np.log10(2 * np.abs(X[:int(N/2)+1]) ** 2)
         freq = np.linspace(0, self.sample_rate/2, int(N/2)+1)
         return freq, psd
+
     def plot_datanpsd(self):
-        """Plot the data and its power spectral density."""
+        """
+        Plot the simulated data (timeseries) and its Power Spectral Density (PSD).
+
+        Shows:
+            - Upper panel: EEG timeseries with vertical lines indicating event onsets by condition.
+            - Lower panel: PSD of the simulated data up to 100 Hz.
+        """
         frec, pwr = self.get_psd()  # Get the power spectral density
         t = self.time  # Time array
         fig, axs = plt.subplots(2, 1, figsize=(8, 6), tight_layout=True)
@@ -88,14 +134,27 @@ class EEGSimulator:
         plt.show()
 
 
+    def simulate(self, noise='brown', erp_ker=None, isi={'dist': 'uniform', 'lims': [100,400]}, w_matrix=None, add_linear_mod=False):
+        """
+        Simulate an EEG timeseries with neural responses and optional brown noise.
 
-    def simulate(self, noise='brown',erp_ker=None, isi = {'dist': 'uniform', 'lims': [100,400]} ,w_matrix = None ,add_linear_mod = False):
-        """Simulates the EEG data."""
+        Args:
+            noise (str): Type of noise to add ('brown' or None).
+            erp_ker (dict): A dictionary containing ERP kernels for each condition.
+            isi (dict): Inter-stimulus interval (ISI) specification (default is uniform).
+            w_matrix (list[list[float]]): State transition matrix for condition sequence.
+            add_linear_mod (bool): If True, add linear feature modulation (not implemented).
+
+        Returns:
+            np.ndarray: The simulated EEG data.
+        """
         self.data = np.zeros(self.samples)
-        if noise == 'brown':
-            self.add_brown_noise()
+        
+        if noise is not None:
+            self.add_noise(noise_type=noise)
         else:
             print('No noise added')
+
         # Retrieve all possible conditions from the ERP kernel dictionary
         if erp_ker is None:
             raise ValueError("erp_ker dictionary must be provided.")
@@ -269,6 +328,19 @@ class EEGSimulator:
             print(f"Simulation object does not have an ISI for kernel {kernel_idx}")
     
     def plot_response_idx(self, kernel_idx):
+        """
+        Plot example ERP response and ISI PDF for a given kernel/condition.
+
+        Args:
+            kernel_idx (int): Kernel index for which to show neural response and ISI PDF.
+
+        Shows:
+            Matplotlib figure with:
+                - Upper panel: ERP response for the chosen kernel.
+                - Lower panel: ISI distribution for that kernel.
+        Raises:
+            ValueError: If ISI distribution type is unsupported.
+        """
         if not hasattr(self, f'isi_{kernel_idx}'):
             print(f"None ISI params for kernel {kernel_idx}")
             return
