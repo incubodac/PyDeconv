@@ -90,7 +90,26 @@ class EEGSimulator:
 
 
     def simulate(self, noise='brown',erp_ker=None, isi = {'dist': 'uniform', 'lims': [100,400]} ,w_matrix = None ,add_linear_mod = False):
-        """Simulates the EEG data."""
+        """Simulates the EEG data. 
+        example of erp_kernel:
+        kernels = {
+            0: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
+            1: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.05, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
+            2: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
+            3: {'onsets': [0, 0.19, 0.25], 'amplitudes': [0.1, -0.07, 0.04], 'widths': [0.05, 0.05, 0.07], 'weight':0.3},
+            'modulation': {'ker_idx2mod': 1, 'mod': 'linear','dist': 'uniform', 'lims': [100, 600]}
+        }
+        each kernel index (0, 1, 2, 3) corresponds to a different ERP response, defined by its onsets, amplitudes, and widths.
+        The 'weight' parameter can be used to determine the probability of transitioning to that kernel in the sequence of events
+        in case the w matrix is not provided. 
+        The 'modulation' entry is an example of how you might specify a linear modulation for one of the kernels (in this case, kernel index 1), with its own distribution for the modulation values.
+        w_matrix is a transition matrix that defines the probabilities of transitioning from one kernel to another in the sequence of events.
+        but in future implementation we may want to have a more flexible way of defining how events are chosen, for example by using a 
+        more complex state machine or by allowing for different types of modulations that can affect the transition probabilities between kernels.
+        The basic next idea would be to separate structure conditions and behavioural contions, where the first would be related to block structure of
+        the experiment and the secont to event to event changes in the task. For example, in a visual search task, the structure conditions could be
+        related to the type of search (feature vs conjunction) and the behavioural conditions could be related to the presence or absence of a target in the display.
+        """
         self.data = np.zeros(self.samples)
         if noise == 'brown':
             self.add_brown_noise()
@@ -102,6 +121,7 @@ class EEGSimulator:
         else:
             erp_conditions = list(erp_ker.keys())
         ker_erp_idx = [cond for cond in erp_conditions if isinstance(cond, (int, float))]
+        #here I check the index for each kernel in the kernel dictionary 
         weights = [erp_ker[cond]['weight'] for cond in ker_erp_idx]
         # Normalize weights (in case they don't sum to 1)
         for i, row in enumerate(w_matrix):
@@ -130,6 +150,8 @@ class EEGSimulator:
 
         times = []
         samples = []
+        
+    # Generate ISI samples based on the sequence of states and their corresponding ISI parameters   
         for choice in states_sequence:
             isi_param = getattr(self, f'isi_{choice}', None)
 
