@@ -339,10 +339,14 @@ def plot_model_results(deconv_model ,list_of_coeffs, figsize=[20,15],top_topos=T
     
     fig = plt.figure(constrained_layout=False,figsize=figsize) 
 
+    coef = deconv_model.coef_
+    if coef.ndim == 1:
+        coef = coef[np.newaxis, :]
+
     jump=0
     for coeff in list_of_coeffs:
         n_coeff = list_of_coeffs.index(coeff)
-        data = deconv_model.coef_[:,deconv_model.delays_*n_coeff:deconv_model.delays_*(n_coeff+1)]
+        data = coef[:,deconv_model.delays_*n_coeff:deconv_model.delays_*(n_coeff+1)]
         base_lims = [-.2, 0 ]
         times = np.linspace(deconv_model.tmin,deconv_model.tmax,deconv_model.delays_)
         eeg = deconv_model.eeg

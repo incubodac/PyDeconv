@@ -392,13 +392,347 @@ class EEGSimulator:
         axs[1].set_xlabel('Time (s)')
         axs[1].set_ylabel('Probability')
         axs[1].set_title(f'ISI distribution for kernel {kernel_idx}')
-        
         # plt.show(block=True)
 
         
     def plot_all_responses(self):
         print('not implemented')
+
+
+# new suggestion 2026
+
+class ExperimentDesign:
+    """Defines the structure an experimenter would create."""
+    
+    def __init__(self, sfreq=500):
+        self.sfreq = sfreq
+        self.trial_types = {}    # condition definitions
+        self.event_sequence = {} # events within each trial type
+        self.kernels = {}        # ERP kernel per event label
+        self.covariates = {}     # how covariates modulate kernels
+        self.blocks = []         # block structure
+    
+    def add_trial_type(self, name, events, probability=None):
+        """
+        Define a trial type with its within-trial event sequence.
         
+        E.g.: 
+          design.add_trial_type('congruent', 
+              events=[
+                  {'label': 'fixation', 'onset': 0},
+                  {'label': 'stimulus', 'onset': {'dist': 'uniform', 'lims': [0.5, 0.8]}},
+                  {'label': 'response', 'onset': {'dist': 'exgaussian', 'mu': 0.4, 'sigma': 0.05, 'tau': 0.1}}
+              ],
+              probability=0.5)
+        """
+        self.trial_types[name] = {
+            'events': events,
+            'probability': probability
+        }
+    
+    def add_block(self, trial_types, n_trials, iti):
+        """
+        Define a block of trials.
+        
+        E.g.:
+          design.add_block(
+              trial_types=['congruent', 'incongruent'],  
+              n_trials=60,
+              iti={'dist': 'uniform', 'lims': [0.8, 1.5]})
+        """
+        self.blocks.append({
+            'trial_types': trial_types,
+            'n_trials': n_trials,
+            'iti': iti
+        })
+    
+    def add_kernel(self, event_label, components):
+        """
+        Define the ERP kernel for an event label.
+        
+        E.g.:
+          design.add_kernel('fixation', 
+              components=[
+                  {'onset': 0.0,  'amplitude': 0.08, 'width': 0.04},
+                  {'onset': 0.17, 'amplitude': -0.05, 'width': 0.05}
+              ])
+        """
+        self.kernels[event_label] = components
+    
+    def add_covariate(self, name, kind, affects, **kwargs):
+        """
+        Define a covariate that modulates an ERP.
+        
+        Categorical (from trial type):
+          design.add_covariate('effect', kind='categorical',
+              affects='stimulus', 
+              mapping={'congruent': 0, 'incongruent': 1},
+              amplitude_scale={'congruent': 1.0, 'incongruent': 1.4})
+        
+        Continuous (behavioral):
+          design.add_covariate('rt', kind='continuous',
+              affects='stimulus',
+              source='response_onset',  # derived from response event timing
+              modulation='linear', slope=0.3)
+              
+          design.add_covariate('sac_amplitude', kind='continuous',
+              affects='fixation',
+              dist={'dist': 'truncnorm', 'mean': 2.0, 'std': 1.0, 'lims': [0.5, 5.0]},
+              modulation='linear', slope=0.5)
+        """
+        self.covariates[name] = {'kind': kind, 'affects': affects, **kwargs}
+
+
+class EEGSimulator_v2:
+    def __init__(self, design: ExperimentDesign, duration=None, noise='brown'):
+        self.design = design
+        self.sfreq = design.sfreq
+        self.noise = noise
+        self._duration = duration  # if None, derived from events
+
+    def _sample_from_dist(self, dist_spec):
+        """Sample a single value from a distribution specification dict."""
+        if isinstance(dist_spec, (int, float)):
+            return float(dist_spec)
+        dist = dist_spec['dist']
+        lims = dist_spec.get('lims', [0, 1])
+        if dist == 'uniform':
+            return uniform.rvs(loc=lims[0], scale=lims[1] - lims[0])
+        elif dist == 'skewed':
+            skew = dist_spec.get('skew', 0)
+            scale = dist_spec.get('scale', 0.1)
+            return skewnorm.rvs(skew, loc=lims[0], scale=scale)
+        elif dist == 'truncnorm':
+            from scipy.stats import truncnorm
+            mean = dist_spec['mean']
+            std = dist_spec['std']
+            a = (lims[0] - mean) / std
+            b = (lims[1] - mean) / std
+            return truncnorm.rvs(a, b, loc=mean, scale=std)
+        else:
+            raise ValueError(f"Unsupported distribution: {dist}")
+
+    def _generate_trial_sequence(self, block):
+        """Generate a randomized sequence of trial type names for a block."""
+        trial_types = block['trial_types']
+        n_trials = block['n_trials']
+        probs = []
+        for tt in trial_types:
+            p = self.design.trial_types[tt].get('probability')
+            probs.append(p if p is not None else 1.0 / len(trial_types))
+        probs = np.array(probs)
+        probs = probs / probs.sum()
+        return np.random.choice(trial_types, size=n_trials, p=probs).tolist()
+
+    def _generate_trial(self, trial_type_name, trial_onset_time):
+        """Generate events for one trial, returning list of event dicts."""
+        trial_def = self.design.trial_types[trial_type_name]
+        events = []
+        for evt_def in trial_def['events']:
+            onset_spec = evt_def['onset']
+            if isinstance(onset_spec, (int, float)):
+                relative_onset = float(onset_spec)
+            else:
+                relative_onset = self._sample_from_dist(onset_spec)
+            evt_time = trial_onset_time + relative_onset
+            events.append({
+                'latency_s': evt_time,
+                'latency': evt_time * self.sfreq,
+                'type': evt_def['label'],
+                'trial_type': trial_type_name,
+            })
+        return events
+
+    def _sample_iti(self, iti_spec):
+        """Sample an inter-trial interval."""
+        return self._sample_from_dist(iti_spec)
+
+    def _apply_covariates(self):
+        """Add covariate columns to self.evts based on design specifications."""
+        for cov_name, cov_spec in self.design.covariates.items():
+            if cov_spec['kind'] == 'categorical':
+                mapping = cov_spec['mapping']
+                self.evts[cov_name] = self.evts['trial_type'].map(mapping)
+            elif cov_spec['kind'] == 'continuous':
+                affects = cov_spec['affects']
+                mask = self.evts['type'] == affects
+                n_affected = mask.sum()
+                if 'dist' in cov_spec:
+                    values = [self._sample_from_dist(cov_spec['dist']) for _ in range(n_affected)]
+                    self.evts.loc[mask, cov_name] = values
+                else:
+                    self.evts[cov_name] = np.nan
+
+    def _gaussian_response(self, time_array, onset, amplitude, width):
+        """Generate a Gaussian bump on time_array centered at onset + 2*width."""
+        mu = onset + 2 * width
+        g = 1 / (width * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((time_array - mu) / width) ** 2)
+        return g * amplitude
+
+    def _generate_eeg(self):
+        """Build the continuous EEG signal from kernels and events."""
+        max_latency_s = self.evts['latency_s'].max() + 1.0
+        if self._duration is not None:
+            duration = max(self._duration, max_latency_s)
+        else:
+            duration = max_latency_s
+        n_samples = int(duration * self.sfreq)
+        self.time = np.arange(n_samples) / self.sfreq
+        self.data = np.zeros(n_samples)
+        self.samples = n_samples
+        self.duration = duration
+
+        if self.noise == 'brown':
+            self._add_brown_noise()
+
+        cov_scales = {}
+        for cov_name, cov_spec in self.design.covariates.items():
+            if cov_spec['kind'] == 'categorical' and 'amplitude_scale' in cov_spec:
+                cov_scales[cov_name] = cov_spec['amplitude_scale']
+
+        for _, evt in self.evts.iterrows():
+            label = evt['type']
+            if label not in self.design.kernels:
+                continue
+            onset_s = evt['latency_s']
+            scale_factor = 1.0
+            for cov_name, amp_scales in cov_scales.items():
+                trial_type = evt['trial_type']
+                if trial_type in amp_scales:
+                    scale_factor *= amp_scales[trial_type]
+            for cov_name, cov_spec in self.design.covariates.items():
+                if cov_spec['kind'] == 'continuous' and cov_spec['affects'] == label:
+                    if cov_name in evt and not pd.isna(evt[cov_name]):
+                        slope = cov_spec.get('slope', 0)
+                        scale_factor *= (1.0 + slope * evt[cov_name])
+            for comp in self.design.kernels[label]:
+                self.data += scale_factor * self._gaussian_response(
+                    self.time, onset_s + comp['onset'], comp['amplitude'], comp['width'])
+
+    def _add_brown_noise(self, scale=0.5):
+        """Add 1/f^2 brown noise to self.data."""
+        n = self.samples
+        noise = np.random.randn(n + 1)
+        freqs = np.fft.fftfreq(n + 1, 1 / self.sfreq)
+        psd = 1 / np.sqrt(np.abs(freqs[1:]))
+        noise_fft = np.fft.fft(noise[1:])
+        noise_fft = noise_fft[:len(psd)]
+        noise_fft *= psd
+        noise = np.real(np.fft.ifft(noise_fft))
+        self.data[:len(noise)] += noise * scale
+
+    def simulate(self):
+        """
+        1. Generate trial sequence from blocks (randomized within block)
+        2. For each trial, sample within-trial event onsets
+        3. Build the events DataFrame with latency, type, and covariates
+        4. Generate continuous EEG by summing kernels (modulated by covariates)
+        """
+        events_list = []
+        current_time = 0.0
+
+        for block in self.design.blocks:
+            trial_sequence = self._generate_trial_sequence(block)
+            for trial_type in trial_sequence:
+                trial_events = self._generate_trial(trial_type, current_time)
+                events_list.extend(trial_events)
+                current_time = trial_events[-1]['latency_s'] + self._sample_iti(block['iti'])
+
+        self.evts = pd.DataFrame(events_list)
+        self._apply_covariates()
+        self._generate_eeg()
+        return self.data, self.evts
+
+    def plot_datanpsd(self):
+        """Plot the data and its power spectral density."""
+        N = self.samples
+        X = np.fft.fft(self.data) / N
+        pwr = 10 * np.log10(2 * np.abs(X[:int(N/2)+1]) ** 2)
+        frec = np.linspace(0, self.sfreq / 2, int(N/2)+1)
+
+        fig, axs = plt.subplots(2, 1, figsize=(10, 6), tight_layout=True)
+
+        axs[0].plot(self.time, self.data, lw=0.5)
+        colors = {'fixation': 'r', 'stimulus': 'b', 'response': 'g'}
+        used_labels = set()
+        for _, evt in self.evts.iterrows():
+            label = evt['type']
+            c = colors.get(label, 'k')
+            lbl = label if label not in used_labels else None
+            axs[0].axvline(x=evt['latency_s'], color=c, linestyle='--', alpha=0.3, label=lbl)
+            used_labels.add(label)
+        axs[0].legend()
+        axs[0].set_xlabel('Time (s)')
+        axs[0].set_ylabel('Amplitude')
+        axs[0].set_title('Data signal')
+
+        idx = np.where(frec >= 100)[0]
+        if len(idx) > 0:
+            idx = idx[0]
+        else:
+            idx = len(frec)
+        axs[1].plot(frec[:idx], pwr[:idx], lw=0.8)
+        axs[1].set_xlabel('Frequency (Hz)')
+        axs[1].set_ylabel('Power (dB)')
+        axs[1].set_ylim([-100, 40])
+        axs[1].set_title('Spectral Power')
+        plt.show()
+
+    def plot_kernel(self, event_label):
+        """Plot the ERP kernel waveform and ITI distribution for a given event label."""
+        if event_label not in self.design.kernels:
+            print(f"No kernel defined for '{event_label}'")
+            return
+
+        components = self.design.kernels[event_label]
+        # Build a 1-second time window starting before the first component
+        first_width = components[0]['width']
+        t_start = -2 * first_width
+        t_end = t_start + 1.0
+        times = np.linspace(t_start, t_end, 500)
+
+        # Sum all kernel components
+        waveform = np.zeros_like(times)
+        for comp in components:
+            waveform += self._gaussian_response(times, comp['onset'], comp['amplitude'], comp['width'])
+
+        # Get ITI spec from the first block (they share the same ITI in most designs)
+        iti_spec = self.design.blocks[0]['iti'] if self.design.blocks else None
+
+        n_plots = 2 if iti_spec else 1
+        fig, axs = plt.subplots(n_plots, 1, figsize=(6, 4 * n_plots), tight_layout=True)
+        if n_plots == 1:
+            axs = [axs]
+
+        # Top: kernel waveform
+        axs[0].plot(times, waveform, lw=0.8)
+        axs[0].set_xlabel('Time (s)')
+        axs[0].set_ylabel('Amplitude')
+        axs[0].set_title(f'ERP kernel: {event_label}')
+
+        # Bottom: ITI distribution
+        if iti_spec:
+            lims = iti_spec.get('lims', [0, 1])
+            x = np.linspace(lims[0] - 0.1, lims[1] + 0.1, 500)
+            dist = iti_spec.get('dist', 'uniform')
+            if dist == 'uniform':
+                pdf = uniform.pdf(x, loc=lims[0], scale=lims[1] - lims[0])
+            elif dist == 'skewed':
+                pdf = skewnorm.pdf(x, iti_spec.get('skew', 0),
+                                   loc=lims[0], scale=iti_spec.get('scale', 0.1))
+            else:
+                pdf = np.zeros_like(x)
+            axs[1].plot(x, pdf, lw=0.8)
+            axs[1].set_xlabel('Time (s)')
+            axs[1].set_ylabel('Probability')
+            axs[1].set_title('ITI distribution')
+
+        plt.show()
+
+    def data_stats(self):
+        """Display basic statistics for the data."""
+        print(f'Mean:    {np.mean(self.data)}\nMedian:    {np.median(self.data)}\nVariance:  {np.var(self.data)}')
+
 
 if __name__ == '__main__':
     print('Trying EEG Simulation...')
@@ -436,24 +770,20 @@ if __name__ == '__main__':
     sig.evts['latency'].diff().hist(bins=50)
     plt.show()
     print(sig.evts)
-    
-    
-    
-    
-    
-    
-    ########
-    # TODO #
-    ########
-    # 1.1 add linear modulation to one or several kernels, define how events will be chosen
-    # 1.2 
-    # 2. filter it as It was a real data
-    # 4. create ERP make a method to do so 
-    # 5. apply PyDeconv
-    # 6. compare scores on several conditions 
-    #     .Levels of noise 
-    #     . 
-    #     . 
+
+
+########
+# TODO #
+########
+# 1.1 add linear modulation to one or several kernels, define how events will be chosen
+# 1.2 
+# 2. filter it as It was a real data
+# 4. create ERP make a method to do so 
+# 5. apply PyDeconv
+# 6. compare scores on several conditions 
+#     .Levels of noise 
+#     . 
+#     . 
 
 # terminar ruido con features
 # distribution of onsets and overlaping characterization
