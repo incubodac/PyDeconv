@@ -10,6 +10,10 @@ Find detailed tutorials and examples in the [documentation](#).
 
 Follow the installation guide in the documentation to get started with PyDeconv.
 
+### First-time setup script
+
+Run `./install_deps.sh` only the first time you install the project. It automatically selects an available Python version (≥ 3.9), creates a virtual environment at `.venv`, and installs the required dependencies via `pip` (mne, numpy, scipy, matplotlib, pandas, scikit-learn).
+
 ## Dependencies
 
 The minimum required dependencies to run PyDeconv examples are:
@@ -74,3 +78,4 @@ model = {
     "eeg_chns": 64
 }
 
+```
