@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.signal import fftconvolve, windows
 import pandas as pd
+from typing import Any, Callable, Sequence
 
 
 class ERPKernel:
@@ -288,3 +289,102 @@ class EEGSimulator:
         axs[1].set_title('Power Spectral Density')
 
         plt.show()
+
+
+class TrialVariable:
+    """Specification for a variable attached to events.
+
+    Parameters
+    ----------
+    name
+        Column name to add to the events DataFrame.
+    generator
+        Function called to generate values. It will be called as
+        ``generator(n, rng)`` and must return a length-n sequence.
+        (Extra args are optional; see notes.)
+    static_accross_trial
+        If True, generate one value per *trial* and broadcast to all events in
+        that trial. If False, generate one value per *event*.
+
+    Notes
+    -----
+    For convenience, generators may also accept fewer parameters:
+    - ``generator(n)``
+    - ``generator(n, rng)``
+    """
+
+    name: str
+    generator: Callable[..., Sequence[Any]]
+    static_across_trial: bool = False
+
+    def __init__(self, name: str, generator: Callable[..., Sequence[Any]], static_accross_trial: bool = False):
+        self.name = name
+        self.generator = generator
+        self.static_across_trial = static_accross_trial
+
+
+class TrialStructure:
+    """Defines per-trial variables and can generate an events DataFrame.
+
+    This is a lightweight building block intended to sit “above” the low-level
+    convolution simulator (`EEGSimulator`). The output events DataFrame is
+    compatible with `EEGSimulator.set_events()` (must contain `latency`, `type`).
+    """
+
+    def __init__(self, sfreq: float, variables: list[TrialVariable] = [], seed: int | None = None):
+        self.sfreq = sfreq
+        self.variables = variables
+        self.rng = np.random.default_rng(seed)
+
+    def add_variable(self, name: str, generator: Callable[..., Any], *, static: bool = False):
+        self.variables.append(TrialVariable(name=name, generator=generator, static_across_trial=static))
+        return self
+
+    def generate_events_df(
+        self,
+        n_samples: int,
+        n_events: int
+    ) -> pd.DataFrame:
+        """Generate an events DataFrame for one trial.
+
+        Parameters
+        ----------
+        n_samples
+            Number of samples in the simulated continuous signal (trial length).
+        event_dist
+            Event distribution specification. Supported forms:
+
+            1) Dict mapping event type -> count/spec:
+               - ``{'stimulus': 10}`` (exact count)
+               - ``{'stimulus': {'n': 10}}`` (exact count)
+               - ``{'stimulus': {'rate_hz': 0.5}}`` (Poisson count with mean = rate * duration)
+
+        Returns
+        -------
+        events : pandas.DataFrame
+            Columns: `latency` (samples, int), `type` (str), `trial` (int),
+            plus any variables defined in this structure.
+        """
+        n_samples = int(n_samples)
+
+        latencies = np.sort(np.random.choice(np.arange(500, int(n_samples) - 500), n_events, replace=False))
+        events = pd.DataFrame(columns=['latency'])
+        events['latency'] = latencies
+
+        # Apply variables
+        for var in self.variables:
+            if var.static_across_trial:
+                value = var.generator(1, self.rng)
+                if len(value) != 1:
+                    raise ValueError(f"Static variable '{var.name}' generator must return length 1.")
+                events[var.name] = value[0]
+            else:
+                values = var.generator(len(events), self.rng)
+                if len(values) != len(events):
+                    raise ValueError(
+                        f"Variable '{var.name}' generator returned length {len(values)} "
+                        f"but expected {len(events)}."
+                    )
+                events[var.name] = values
+
+        return events
