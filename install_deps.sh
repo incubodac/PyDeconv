@@ -35,7 +35,7 @@ else
 fi
 
 python -m pip install --upgrade pip
-python -m pip install mne numpy scipy matplotlib pandas scikit-learn
+python -m pip install mne numpy scipy matplotlib pandas scikit-learn art pyside6
 
 echo "Done. To start using it:"
 echo "  source .venv/bin/activate"

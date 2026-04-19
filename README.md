@@ -25,6 +25,8 @@ The minimum required dependencies to run PyDeconv examples are:
 - [Matplotlib](https://matplotlib.org) ≥ 3.6
 - [Pandas](https://pandas.pydata.org) ≥ 2.1.0
 - [scikit-learn](https://scikit-learn.org) ≥ 1.2.2  
+- [art](https://pypi.org/project/art/) >= 6.5
+- any python qt backend, like [pyside6](https://www.qt.io/development/qt-framework/python-bindings)
 
 ## Usage
 
