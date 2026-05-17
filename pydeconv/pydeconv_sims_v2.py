@@ -4,6 +4,34 @@ from scipy.signal import fftconvolve, windows
 import pandas as pd
 from typing import Any, Callable, Sequence
 
+ISISampler = Callable[[pd.Series], int]
+
+
+def build_uniform_isi_sampler(
+    width: int,
+    offset: int = 0,
+    *,
+    rng: np.random.Generator | None = None,
+) -> ISISampler:
+    """Build an ISI sampler that draws uniformly from [offset, offset + width]."""
+    rng = rng or np.random.default_rng()
+
+    def _sample(_row: pd.Series) -> int:
+        return int(rng.integers(offset, offset + width + 1))
+
+    return _sample
+
+
+def assign_event_latencies(events: pd.DataFrame, sampler: ISISampler) -> pd.DataFrame:
+    """Assign cumulative latencies by sampling an ISI offset per row."""
+    out = events.copy()
+    latencies: list[int] = []
+    for _, row in out.iterrows():
+        delta = sampler(row)
+        latencies.append(delta if not latencies else latencies[-1] + delta)
+    out["latency"] = latencies
+    return out
+
 
 class ERPKernel:
     """A single ERP component defined by peak latency, width, and shape.
@@ -342,36 +370,22 @@ class TrialStructure:
 
     def generate_events_df(
         self,
-        n_samples: int,
-        n_events: int
+        n_events: int,
     ) -> pd.DataFrame:
         """Generate an events DataFrame for one trial.
 
         Parameters
         ----------
-        n_samples
-            Number of samples in the simulated continuous signal (trial length).
-        event_dist
-            Event distribution specification. Supported forms:
-
-            1) Dict mapping event type -> count/spec:
-               - ``{'stimulus': 10}`` (exact count)
-               - ``{'stimulus': {'n': 10}}`` (exact count)
-               - ``{'stimulus': {'rate_hz': 0.5}}`` (Poisson count with mean = rate * duration)
+        n_events
+            Number of events in the trial.
 
         Returns
         -------
         events : pandas.DataFrame
-            Columns: `latency` (samples, int), `type` (str), `trial` (int),
-            plus any variables defined in this structure.
+            Columns: any variables defined in the trial structure.
         """
-        n_samples = int(n_samples)
+        events = pd.DataFrame(index=range(n_events))
 
-        latencies = np.sort(np.random.choice(np.arange(500, int(n_samples) - 500), n_events, replace=False))
-        events = pd.DataFrame(columns=['latency'])
-        events['latency'] = latencies
-
-        # Apply variables
         for var in self.variables:
             if var.static_across_trial:
                 value = var.generator(1, self.rng)
@@ -379,12 +393,7 @@ class TrialStructure:
                     raise ValueError(f"Static variable '{var.name}' generator must return length 1.")
                 events[var.name] = value[0]
             else:
-                values = var.generator(len(events), self.rng)
-                if len(values) != len(events):
-                    raise ValueError(
-                        f"Variable '{var.name}' generator returned length {len(values)} "
-                        f"but expected {len(events)}."
-                    )
+                values = var.generator(n_events, self.rng)
                 events[var.name] = values
 
         return events
