@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from scipy.signal import fftconvolve, windows
 import pandas as pd
 from typing import Any, Callable, Sequence
+import inspect
 
 ISISampler = Callable[[pd.Series], int]
 
@@ -46,6 +47,8 @@ class ERPKernel:
         Peak amplitude (arbitrary units).
     width : float
         Width parameter in seconds (std for Gaussian, half-width for Hanning).
+    modifier : Callable[..., float]
+        Function called to modify the amplitude of the kernel.
     shape : str
         Kernel shape: ``'gaussian'`` or ``'hanning'``.
     label : str or None
@@ -53,13 +56,26 @@ class ERPKernel:
     """
 
     def __init__(self, sfreq: float, peak_latency: float, amplitude: float,
-                 width: float, shape: str = 'gaussian', label: str | None = None):
+                 width: float, modifier: Callable[..., float] = lambda _: 0.0, shape: str = 'gaussian', label: str | None = None):
         self.sfreq = sfreq
         self.peak_latency = peak_latency
         self.amplitude = amplitude
         self.width = width
         self.shape = shape
         self.label = label or f"{shape}@{peak_latency:.3f}s"
+
+        self.modifying_variables = set()
+        for name, _ in inspect.signature(modifier).parameters.items():
+            self.modifying_variables.add(name)
+
+        self.modifier = modifier
+        if 'kwargs' not in self.modifying_variables:
+            def wrapper(**kwargs):
+                filtered = {k: v for k, v in kwargs.items() if k in self.modifiying_variables}
+                return modifier(**filtered)
+            
+            self.modifier = wrapper
+
         self._build()
 
     def _build(self):
@@ -123,7 +139,7 @@ class CompoundKernel:
         self.waveform: np.ndarray | None = None
         self.time: np.ndarray | None = None
 
-    def add(self, peak_latency: float, amplitude: float, width: float,
+    def add(self, peak_latency: float, amplitude: float, width: float, modifier: Callable[..., float] = lambda _: 0.0,
             shape: str = 'gaussian', label: str | None = None) -> 'CompoundKernel':
         """Add a component to the compound kernel.
 
@@ -135,6 +151,8 @@ class CompoundKernel:
             Peak amplitude.
         width : float
             Width in seconds.
+        modifier : Callable[..., float]
+            Function called to modify the amplitude of the kernel.
         shape : str
             ``'gaussian'`` or ``'hanning'``.
         label : str or None
@@ -146,7 +164,7 @@ class CompoundKernel:
             For method chaining.
         """
         self.components.append(
-            ERPKernel(self.sfreq, peak_latency, amplitude, width, shape, label))
+            ERPKernel(self.sfreq, peak_latency, amplitude, width, modifier, shape, label))
         self._rebuild()
         return self
 
@@ -195,7 +213,7 @@ class EEGSimulator:
         self.n_samples = int(duration * sfreq)
         self.time = np.arange(self.n_samples) / sfreq
         self.data = np.zeros(self.n_samples)
-        self.kernels: dict[str, CompoundKernel | ERPKernel] = {}
+        self.kernels: dict[str, CompoundKernel] = {}
         self.event_sticks: dict[str, np.ndarray] = {}
 
     def add_kernel(self, name_or_dict, kernel=None):
@@ -227,12 +245,25 @@ class EEGSimulator:
         """
         self.events = events.copy()
         self.event_sticks = {}
-        for evt_type in events['type'].unique():
-            stick = np.zeros(self.n_samples)
-            lats = events.loc[events['type'] == evt_type, 'latency'].values.astype(int)
-            valid = lats[(lats >= 0) & (lats < self.n_samples)]
-            stick[valid] = 1.0
-            self.event_sticks[evt_type] = stick
+        self.component_sticks = {}
+
+        for name, comp_kernel in self.kernels.items():
+            for kernel in comp_kernel.components:
+                stick = np.zeros(self.n_samples)
+                for _row_idx, event in events.iterrows():
+                    # TODO: do we need to define a sort of onset instead?
+                    latency_offset = int(event['latency']) + int(kernel.peak_latency * kernel.sfreq)
+                    stick[latency_offset] = 1.0 + kernel.modifier(event)
+
+                self.component_sticks[(name, kernel.label)] = stick
+
+
+        # for evt_type in events['type'].unique():
+        #     stick = np.zeros(self.n_samples)
+        #     lats = events.loc[events['type'] == evt_type, 'latency'].values.astype(int)
+        #     valid = lats[(lats >= 0) & (lats < self.n_samples)]
+        #     stick[valid] = 1.0
+        #     self.event_sticks[evt_type] = stick
 
     def simulate(self) -> np.ndarray:
         """Convolve each stick function with its kernel and sum into self.data.
@@ -243,12 +274,14 @@ class EEGSimulator:
             The simulated EEG signal (n_samples,).
         """
         self.data = np.zeros(self.n_samples)
-        for name, kernel in self.kernels.items():
-            if name not in self.event_sticks:
-                continue
-            stick = self.event_sticks[name]
-            convolved = fftconvolve(stick, kernel.waveform, mode='full')[:self.n_samples]
-            self.data += convolved
+        for name, comp_kernel in self.kernels.items():
+            for kernel in comp_kernel.components:
+                if (name, kernel.label) not in self.component_sticks:
+                    continue
+
+                stick = self.component_sticks[(name, kernel.label)]
+                convolved = fftconvolve(stick, kernel.waveform, mode='full')[:self.n_samples]
+                self.data += convolved
         return self.data
 
     # ------ noise methods ------
@@ -297,7 +330,7 @@ class EEGSimulator:
         used = set()
         if hasattr(self, 'events'):
             for _, evt in self.events.iterrows():
-                etype = evt['type']
+                etype = evt.get('type', "NoType")
                 c = colors[hash(etype) % len(colors)]
                 lbl = etype if etype not in used else None
                 lat_s = evt['latency'] / self.sfreq
