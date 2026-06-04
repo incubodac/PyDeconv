@@ -133,7 +133,8 @@ class CompoundKernel:
         Sampling frequency in Hz.
     """
 
-    def __init__(self, sfreq: float):
+    def __init__(self, name: str, sfreq: float):
+        self.name = name
         self.sfreq = sfreq
         self.components: list[ERPKernel] = []
         self.waveform: np.ndarray | None = None
@@ -213,10 +214,10 @@ class EEGSimulator:
         self.n_samples = int(duration * sfreq)
         self.time = np.arange(self.n_samples) / sfreq
         self.data = np.zeros(self.n_samples)
-        self.kernels: dict[str, CompoundKernel] = {}
+        self.kernels: list[CompoundKernel] = []
         self.event_sticks: dict[str, np.ndarray] = {}
 
-    def add_kernel(self, name_or_dict, kernel=None):
+    def add_kernel(self, activation_function : Callable[..., bool], kernel=None):
         """Register one or more named kernels for convolution.
 
         Parameters
@@ -228,12 +229,7 @@ class EEGSimulator:
         kernel : CompoundKernel, ERPKernel, or None
             Required when ``name_or_dict`` is a str. Ignored when a dict is passed.
         """
-        if isinstance(name_or_dict, dict):
-            self.kernels.update(name_or_dict)
-        else:
-            if kernel is None:
-                raise ValueError("A kernel must be provided when name is a string.")
-            self.kernels[name_or_dict] = kernel
+        self.kernels.append((kernel, activation_function))
 
     def set_events(self, events: pd.DataFrame):
         """Build stick functions from an events DataFrame.
@@ -247,15 +243,18 @@ class EEGSimulator:
         self.event_sticks = {}
         self.component_sticks = {}
 
-        for name, comp_kernel in self.kernels.items():
+        for (comp_kernel, act_function) in self.kernels:
             for kernel in comp_kernel.components:
                 stick = np.zeros(self.n_samples)
                 for _row_idx, event in events.iterrows():
+                    if not act_function(event):
+                        continue
+
                     # TODO: do we need to define a sort of onset instead?
                     latency_offset = int(event['latency']) + int(kernel.peak_latency * kernel.sfreq)
                     stick[latency_offset] = 1.0 + kernel.modifier(event)
 
-                self.component_sticks[(name, kernel.label)] = stick
+                self.component_sticks[(comp_kernel.name, kernel.label)] = stick
 
 
         # for evt_type in events['type'].unique():
@@ -274,12 +273,12 @@ class EEGSimulator:
             The simulated EEG signal (n_samples,).
         """
         self.data = np.zeros(self.n_samples)
-        for name, comp_kernel in self.kernels.items():
+        for comp_kernel, _act_function in self.kernels:
             for kernel in comp_kernel.components:
-                if (name, kernel.label) not in self.component_sticks:
+                if (comp_kernel.name, kernel.label) not in self.component_sticks:
                     continue
 
-                stick = self.component_sticks[(name, kernel.label)]
+                stick = self.component_sticks[(comp_kernel.name, kernel.label)]
                 convolved = fftconvolve(stick, kernel.waveform, mode='full')[:self.n_samples]
                 self.data += convolved
         return self.data
