@@ -71,7 +71,7 @@ class ERPKernel:
         self.modifier = modifier
         if 'kwargs' not in self.modifying_variables:
             def wrapper(**kwargs):
-                filtered = {k: v for k, v in kwargs.items() if k in self.modifiying_variables}
+                filtered = {k: v for k, v in kwargs.items() if k in self.modifying_variables}
                 return modifier(**filtered)
             
             self.modifier = wrapper
