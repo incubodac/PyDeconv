@@ -252,7 +252,7 @@ class EEGSimulator:
 
                     # TODO: do we need to define a sort of onset instead?
                     latency_offset = int(event['latency']) + int(kernel.peak_latency * kernel.sfreq)
-                    stick[latency_offset] = 1.0 + kernel.modifier(event)
+                    stick[latency_offset] = 1.0 + kernel.modifier(**event)
 
                 self.component_sticks[(comp_kernel.name, kernel.label)] = stick
 
