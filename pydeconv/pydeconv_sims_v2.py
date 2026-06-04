@@ -315,7 +315,7 @@ class EEGSimulator:
 
     # ------ plotting ------
 
-    def plot(self):
+    def plot(self, event_category: Callable[..., str] = lambda evt: evt.get('type', "NoType")):
         """Plot the simulated signal with event markers and PSD."""
         N = self.n_samples
         X = np.fft.rfft(self.data) / N
@@ -330,11 +330,10 @@ class EEGSimulator:
         used = set()
         if hasattr(self, 'events'):
             for _, evt in self.events.iterrows():
-                etype = evt.get('type', "NoType")
+                etype = event_category(evt)
                 c = colors[hash(etype) % len(colors)]
                 lbl = etype if etype not in used else None
-                lat_s = evt['latency'] / self.sfreq
-                axs[0].axvline(x=lat_s, color=c, ls='--', alpha=0.3, label=lbl)
+                axs[0].axvline(x=evt['latency'], color=c, ls='--', alpha=0.3, label=lbl)
                 used.add(etype)
             axs[0].legend(fontsize=8)
         axs[0].set_xlabel('Time (s)')
