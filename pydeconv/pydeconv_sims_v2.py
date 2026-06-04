@@ -139,7 +139,7 @@ class CompoundKernel:
         self.waveform: np.ndarray | None = None
         self.time: np.ndarray | None = None
 
-    def add(self, peak_latency: float, amplitude: float, width: float, modifier: Callable[..., float] = lambda _: 0.0,
+    def add(self, peak_latency: float, amplitude: float, width: float, modifier: Callable[..., float] = lambda : 0.0,
             shape: str = 'gaussian', label: str | None = None) -> 'CompoundKernel':
         """Add a component to the compound kernel.
 
