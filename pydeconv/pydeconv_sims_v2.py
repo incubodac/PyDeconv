@@ -22,9 +22,54 @@ def build_uniform_isi_sampler(
 
     return _sample
 
+def build_gamma_isi_sampler(mean: int, scale: int = 1, offset: int = 0) -> ISISampler:
+    """
+    Build an ISI sampler that draws from a gamma distribution offseted by offset.
+    
+    Parameters
+    ----------
+    mean : int
+        mean of the gamma distribution.
+    scale : int
+        scale of the gamma distribution. Equivalent to a rate value of 1/scale.
+    offset : int
+        offset in .samples used to shift the resulting value.
+    """
+    rng = rng or np.random.default_rng()
+
+    def _sample(_row: pd.Series) -> int:
+        return int(offset + rng.gamma(mean, scale))
+
+    return _sample
+
+def build_constant_isi_sampler(value: int = 0) -> ISISampler:
+    """
+    Build an ISI sampler that always returns value for an ISI.
+    
+    Parameters
+    ----------
+    value : int
+        the ISI value it'll always return.
+    """
+    rng = rng or np.random.default_rng()
+
+    def _sample(_row: pd.Series) -> int:
+        return int(value)
+
+    return _sample
+
 
 def assign_event_latencies(events: pd.DataFrame, sampler: ISISampler) -> pd.DataFrame:
-    """Assign cumulative latencies by sampling an ISI offset per row."""
+    """
+    Assign cumulative latencies by sampling an ISI offset per row.
+    
+    Parameters
+    ----------
+    events : pd.DataFrame
+        A dataframe having one row per event
+    sampler : ISISampler
+        A function that generates an ISI value in samples between each event
+    """
     out = events.copy()
     latencies: list[int] = []
     for _, row in out.iterrows():
