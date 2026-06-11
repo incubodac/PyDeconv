@@ -101,7 +101,7 @@ class ERPKernel:
     """
 
     def __init__(self, sfreq: float, peak_latency: float, amplitude: float,
-                 width: float, modifier: Callable[..., float] = lambda _: 0.0, shape: str = 'gaussian', label: str | None = None):
+                 width: float, modifier: Callable[..., float] = lambda: 0.0, shape: str = 'gaussian', label: str | None = None):
         self.sfreq = sfreq
         self.peak_latency = peak_latency
         self.amplitude = amplitude
@@ -123,7 +123,7 @@ class ERPKernel:
 
         self._build()
 
-    def _build(self):
+    def _build(self, **kwargs):
         """Compute the discrete kernel waveform."""
         # Kernel spans from 0 to peak_latency + 4*width
         t_end = self.peak_latency + 4 * self.width
@@ -146,6 +146,9 @@ class ERPKernel:
             self.waveform[start:end] = self.amplitude * han[w_start:w_end]
         else:
             raise ValueError(f"Unsupported shape '{self.shape}'. Use 'gaussian' or 'hanning'.")
+        
+        if all([v in kwargs for v in self.modifying_variables]):
+            self.waveform *= (1 + self.modifier(**kwargs))
 
     def plot(self, ax=None):
         """Plot the kernel waveform.
@@ -214,8 +217,11 @@ class CompoundKernel:
         self._rebuild()
         return self
 
-    def _rebuild(self):
+    def _rebuild(self, **kwargs):
         """Recompute the summed waveform from all components."""
+        for k in self.components:
+            k._build(**kwargs)
+
         max_len = max(len(k.waveform) for k in self.components)
         self.time = np.arange(max_len) / self.sfreq
         self.waveform = np.zeros(max_len)
@@ -240,6 +246,68 @@ class CompoundKernel:
         ax.set_title('Compound ERP Kernel')
         ax.legend(fontsize=8)
         plt.show()
+
+    def plot_interactive(self, show_components: bool = True, **kwargs):
+        """Plot the compound kernel, optionally with individual components.
+
+        Parameters
+        ----------
+        show_components : bool
+            If True, overlay each component as a thin dashed line.
+        """
+        from matplotlib.widgets import Button, Slider
+
+        # Make horizontal sliders for parameters
+        vars = set()
+        for k in self.components:
+            for x in k.modifying_variables:
+                vars.add(x)
+
+        args = {k: kwargs[k] for c in self.components for k in c.modifying_variables}
+        sliders = []
+
+        fig, ax = plt.subplots()
+        ax.plot(self.time * 1e3, self.waveform, 'k', lw=1.5, label='sum')
+        
+        fig.subplots_adjust(bottom=0.15 + 0.1 * len(vars))
+
+        bottom = 0.1 * len(vars) 
+        for x in vars:
+            axv = fig.add_axes([0.25, bottom, 0.65, 0.03])
+            slider = Slider(
+                ax=axv,
+                label=x,
+                valmin=0,
+                valmax=30,
+                valinit=kwargs[x]
+            )
+
+            def update(value):
+                args[x] = value
+                self._rebuild(**args)
+
+                ax.cla()
+                ax.plot(self.time * 1e3, self.waveform, 'k', lw=1.5, label='sum')
+                if show_components:
+                    for k in self.components:
+                        ax.plot(k.time * 1e3, k.waveform, ls='--', lw=0.8, alpha=0.6, label=k.label)
+
+                fig.canvas.draw_idle()
+
+            slider.on_changed(update)
+            sliders.append(slider)
+            bottom -= 0.1
+
+        if show_components:
+            for k in self.components:
+                ax.plot(k.time * 1e3, k.waveform, ls='--', lw=0.8, alpha=0.6, label=k.label)
+
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Amplitude')
+        ax.set_title('Compound ERP Kernel')
+        ax.legend(fontsize=8)
+        plt.show()
+        return sliders
 
 
 class EEGSimulator:
