@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# macOS system files
+.DS_Store
+
 # C extensions
 *.so
 
@@ -19,3 +22,22 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Legacy / reference folders (kept locally, not pushed)
+/old/
+/source_examples/
+
+# IDE / agent config (local only)
+.agents/
+
+# EEG binary data files (prevent repo bloat)
+*.fdt
+*.set
+*.edf
+*.bdf
+*.vhdr
+*.vmrk
+*.eeg

@@ -1,5 +1,8 @@
 # PyDeconv – Copilot Instructions
 
+## General idea
+Now I watn to start a tidy package of python for EEG or MEG deconvolution itll be fed with mne raw or numpy array  (chans x time) data and also a pandas/polar dataframe or numpy array. then one may use the main functions like create_design_matrix(data, events) from command line and use THE  plotting methods , from the package we are developing, or create a group and then call the TFCE from mne to make a group analysis.
+
 ## Project Overview
 
 PyDeconv is a scientific Python package for EEG/MEG deconvolution analysis. It builds linear regression models from experimental event features (including interactions and B-splines) and fits them to continuous neural data using regularized regression.
