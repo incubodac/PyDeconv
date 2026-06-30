@@ -30,8 +30,6 @@ venv.bak/
 /old/
 /source_examples/
 
-# IDE / agent config (local only)
-.agents/
 
 # EEG binary data files (prevent repo bloat)
 *.fdt

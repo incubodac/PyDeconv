@@ -14,7 +14,7 @@ from .tfce import (
 )
 
 # 3. Design Matrix (Placeholder for exports when implemented)
-# from .design_matrix import create_design_matrix
+from .design_matrix import create_design_matrix 
 
 # 4. Metrics (Placeholder for exports when implemented)
 # from .metrics import calculate_vif, calculate_aic, calculate_pearson_r
