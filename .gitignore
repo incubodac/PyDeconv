@@ -30,6 +30,9 @@ venv.bak/
 /old/
 /source_examples/
 
+# Agent configuration (local only)
+.agents/
+
 
 # EEG binary data files (prevent repo bloat)
 *.fdt
