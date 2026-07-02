@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import mne
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
@@ -137,3 +138,76 @@ def _load_raw(filepath: str) -> mne.io.BaseRaw:
             f"Supported: {', '.join(sorted(loaders))}"
         )
     return loader(filepath)
+
+
+# ---------------------------------------------------------------------------
+# EventsLoaderWorker
+# ---------------------------------------------------------------------------
+
+
+class EventsLoaderWorker(QRunnable):
+    """Load an events / design-matrix file in a background thread.
+
+    Supports CSV, TSV, Parquet, NumPy ``.npy``, and Excel ``.xlsx`` files.
+    NumPy arrays are wrapped in a DataFrame with auto-generated column names
+    (``feat_0``, ``feat_1``, …).
+
+    Parameters
+    ----------
+    filepath : str
+        Absolute path to the events file.
+    """
+
+    def __init__(self, filepath: str) -> None:
+        super().__init__()
+        self.filepath = filepath
+        self.signals = WorkerSignals()
+        self.setAutoDelete(True)
+
+    @Slot()
+    def run(self) -> None:
+        """Execute the events file loading."""
+        try:
+            self.signals.progress.emit(10)
+            df = _load_events(self.filepath)
+            self.signals.progress.emit(100)
+            self.signals.finished.emit(df)
+        except Exception as exc:  # noqa: BLE001
+            self.signals.error.emit(str(exc))
+
+
+def _load_events(filepath: str) -> pd.DataFrame:
+    """Dispatch to the correct reader based on file extension.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the events / design-matrix file.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        Loaded events table.
+    """
+    ext = filepath.rsplit(".", maxsplit=1)[-1].lower()
+
+    if ext in ("csv", "tsv", "txt"):
+        sep = "\t" if ext == "tsv" else ","
+        df = pd.read_csv(filepath, sep=sep)
+    elif ext == "parquet":
+        df = pd.read_parquet(filepath)
+    elif ext == "npy":
+        arr = np.load(filepath)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        cols = [f"feat_{i}" for i in range(arr.shape[1])]
+        df = pd.DataFrame(arr, columns=cols)
+    elif ext == "xlsx":
+        df = pd.read_excel(filepath)
+    else:
+        raise ValueError(
+            f"Unsupported events file format '.{ext}'. "
+            f"Supported: csv, tsv, txt, parquet, npy, xlsx"
+        )
+    return df
+
