@@ -1,32 +1,41 @@
 # Utility subpackage exports
+#
+# Lazy imports — avoids pulling in heavy dependencies (mne, torch)
+# at utils package init time.  Individual modules can always be
+# imported directly: ``from pydeconv.utils.design_matrix import ...``
 
-# 1. Artifact & Window Rejection
-from .window_rejection import (
-    cont_ArtifactDetect,
-    basicrap,
-    joinclosesegments
-)
 
-# 2. Statistics & Group Analysis (TFCE)
-from .tfce import (
-    tfce,
-    get_channel_adjacency
-)
+def __getattr__(name: str):
+    """Lazy-load public utility symbols on first access."""
+    _window_rejection = {
+        "cont_ArtifactDetect",
+        "basicrap",
+        "joinclosesegments",
+    }
+    _tfce = {
+        "tfce",
+        "get_channel_adjacency",
+    }
+    _design_matrix = {
+        "create_design_matrix",
+    }
 
-# 3. Design Matrix (Placeholder for exports when implemented)
-from .design_matrix import create_design_matrix 
+    if name in _window_rejection:
+        from . import window_rejection
+        return getattr(window_rejection, name)
 
-# 4. Metrics (Placeholder for exports when implemented)
-# from .metrics import calculate_vif, calculate_aic, calculate_pearson_r
+    if name in _tfce:
+        from . import tfce
+        return getattr(tfce, name)
 
-# 5. Plotting (Placeholder for exports when implemented)
-# from .plotting import plot_coefficients, plot_design_matrix
+    if name in _design_matrix:
+        from . import design_matrix
+        return getattr(design_matrix, name)
 
-# 6. Event Stats (Placeholder for exports when implemented)
-# from .event_stats import compute_event_stats
+    raise AttributeError(
+        f"module {__name__!r} has no attribute {name!r}"
+    )
 
-# 7. I/O helpers (Placeholder for exports when implemented)
-# from .io import load_set_file
 
 __all__ = [
     # Rejection
@@ -36,4 +45,6 @@ __all__ = [
     # Stats / TFCE
     'tfce',
     'get_channel_adjacency',
+    # Design matrix
+    'create_design_matrix',
 ]
