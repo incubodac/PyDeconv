@@ -231,6 +231,11 @@ class DeconvolutionModel(BaseEstimator):
         Start of the kernel window in seconds relative to event onset.
     tmax : float
         End of the kernel window in seconds.
+    Event-specific windows can be registered with
+    ``add_new_analysis_window(event_type=..., tmin=..., tmax=...)``.
+    These are stored in the model state and overwrite prior windows for
+    the same event type, while global ``tmin``/``tmax`` remain defaults
+    for other events.
     sfreq : float
         Sampling frequency of the continuous data in Hz.
     Intercepts are event-specific and are added by registering a feature
@@ -293,6 +298,8 @@ class DeconvolutionModel(BaseEstimator):
         self.spline_config = spline_config
         self.estimator = estimator if estimator is not None else Ridge()
         self.scoring = scoring
+        self.global_window: tuple[float, float] = (self.tmin, self.tmax)
+        self.analysis_windows: dict[str, tuple[float, float]] = {}
 
         # ----- derived / fitted state -----
         self._spline_map: dict[str, SplineConfig] | None = (
@@ -401,6 +408,43 @@ class DeconvolutionModel(BaseEstimator):
         if key not in self.interactions:
             self.interactions[key] = []
         self.interactions[key].append((feature_a, feature_b))
+        return self
+
+    def add_new_analysis_window(
+        self,
+        event_type: str,
+        tmin: float,
+        tmax: float,
+    ) -> "DeconvolutionModel":
+        """Register or overwrite an event-specific analysis window.
+
+        Parameters
+        ----------
+        event_type : str
+            Value from ``events[self.event_column]`` to which this window
+            applies.
+        tmin : float
+            Window start in seconds relative to event onset.
+        tmax : float
+            Window end in seconds relative to event onset.
+
+        Returns
+        -------
+        self : DeconvolutionModel
+            For method chaining.
+
+        Notes
+        -----
+        This method currently stores window configuration only.
+        Design-matrix generation still uses the global window and will be
+        extended in a later implementation.
+        """
+        if not isinstance(event_type, str) or not event_type:
+            raise ValueError("event_type must be a non-empty string.")
+        if tmin > tmax:
+            raise ValueError(f"tmin ({tmin}) must be <= tmax ({tmax}).")
+
+        self.analysis_windows[event_type] = (float(tmin), float(tmax))
         return self
 
     # ----- design matrix -----
@@ -681,6 +725,7 @@ class DeconvolutionModel(BaseEstimator):
             f"tmax={self.tmax:.3f}",
             f"sfreq={self.sfreq}",
             f"event_intercepts={len(self.event_intercepts)}",
+            f"event_windows={len(self.analysis_windows)}",
             f"n_features={len(self.additive_features)}",
             f"n_interactions={len(self.interactions)}",
             f"splines={'on' if self._spline_map else 'off'}",
