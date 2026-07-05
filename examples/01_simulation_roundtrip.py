@@ -33,7 +33,7 @@ from pydeconv.simulation import (
 )
 # from pydeconv.utils.metrics import calculate_pearson_r, calculate_aic
 from pydeconv.utils.plotting import plot_simulation_kernels, plot_trfs
-
+from pydeconv.estimators import Tridge
 # ── 1. Experiment design ─────────────────────────────────────────────
 design = ExperimentDesign(
     n_events=200,
@@ -66,8 +66,16 @@ simulator.add_noise(colour="pink", scale=0.5)
 y_noisy = simulator.data
 
 # ── 4. create a model and design matrix ───────────────────────────────────────────
+#scikit learn stimator
+# model = (
+#     DeconvolutionModel(tmin=-0.1, tmax=0.5, sfreq=256)
+#     # name == from_event registers an event-specific intercept.
+#     .add_feature("stimulus", from_event="stimulus")
+#     .add_feature("response", from_event="response")
+# )
+#custom ridge estimator
 model = (
-    DeconvolutionModel(tmin=-0.1, tmax=0.5, sfreq=256)
+    DeconvolutionModel(tmin=-0.1, tmax=0.5, sfreq=256, estimator=Tridge(alpha=1.0, use_gpu=False))
     # name == from_event registers an event-specific intercept.
     .add_feature("stimulus", from_event="stimulus")
     .add_feature("response", from_event="response")
