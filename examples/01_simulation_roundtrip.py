@@ -81,6 +81,8 @@ model = (
     .add_feature("response", from_event="response")
 )
 
+# alternative would be to use the more efficient Gram matrix approach, but for now we stick with the default design matrix approach.
+# X = model.build_gram_matrix(events_df, n_samples=len(y_noisy), use_gpu=False)
 X = model.build_design_matrix(events_df, n_samples=len(y_noisy), use_gpu=False)
 print("Design matrix shape:", X.shape)
 
