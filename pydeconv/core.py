@@ -233,9 +233,8 @@ class DeconvolutionModel(BaseEstimator):
         End of the kernel window in seconds.
     sfreq : float
         Sampling frequency of the continuous data in Hz.
-    has_intercept : bool
-        If ``True``, prepend an all-ones intercept column to the feature
-        matrix before time-shifting.
+    Intercepts are event-specific and are added by registering a feature
+    where ``name == from_event`` (or ``event_type`` / ``type`` alias).
     additive_features : list of Feature or None
         Main-effect predictors.  Each ``Feature`` specifies a column name,
         a human-readable label, and an optional transform.
@@ -262,7 +261,7 @@ class DeconvolutionModel(BaseEstimator):
         tmin: float = -0.2,
         tmax: float = 0.6,
         sfreq: float = 256.0,
-        has_intercept: bool = True,
+        has_intercept: bool | None = None,
         event_column: str = "type",
         additive_features: list[Feature] | dict[str, list[Feature]] | None = None,
         interactions: list[tuple[str, str]] | dict[str, list[tuple[str, str]]] | None = None,
@@ -276,7 +275,9 @@ class DeconvolutionModel(BaseEstimator):
         self.tmin = tmin
         self.tmax = tmax
         self.sfreq = sfreq
-        self.has_intercept = has_intercept
+        # Backward compatibility: the global intercept switch is deprecated.
+        # Intercepts are now controlled per event via add_feature shorthand.
+        _ = has_intercept
         self.event_column = event_column
         
         if isinstance(additive_features, dict):
@@ -302,14 +303,17 @@ class DeconvolutionModel(BaseEstimator):
         self.is_fitted: bool = False
         self._feature_mean_: np.ndarray | None = None
         self._feature_std_: np.ndarray | None = None
+        self.event_intercepts: set[str] = set()
 
     # ----- builder helpers -----
 
     def add_feature(
         self,
         name: str,
-        column: str,
+        column: str | None = None,
         event_type: str | None = None,
+        from_event: str | None = None,
+        type: str | None = None,
         transform: Callable[[np.ndarray], np.ndarray] | None = None,
     ) -> "DeconvolutionModel":
         """Append an additive feature to the model.
@@ -318,11 +322,17 @@ class DeconvolutionModel(BaseEstimator):
         ----------
         name : str
             Human-readable label for this predictor.
-        column : str
-            Column name in the events DataFrame.
+        column : str or None
+            Column name in the events DataFrame. If None, defaults to
+            ``self.event_column``.
         event_type : str or None
-            The specific event type this feature applies to. If None,
-            applies globally to all events.
+            The specific value in ``events[self.event_column]`` this feature
+            applies to. If None, applies globally to all events.
+        from_event : str or None
+            Alias for ``event_type`` with clearer semantics.
+        type : str or None
+            Alias for ``event_type`` for a compact builder style.
+            Cannot be used together with ``event_type`` or ``from_event``.
         transform : callable or None
             Element-wise transformation applied before design-matrix
             construction.
@@ -331,7 +341,34 @@ class DeconvolutionModel(BaseEstimator):
         -------
         self : DeconvolutionModel
             For method chaining.
+
+        Notes
+        -----
+        If ``event_type`` (or one of its aliases) is provided and
+        ``name == event_type``, this call is treated as a request for an
+        event-specific intercept. In that case, the event type is recorded
+        in ``event_intercepts`` and no additive feature column is added.
         """
+        provided = [
+            event_type is not None,
+            from_event is not None,
+            type is not None,
+        ]
+        if sum(provided) > 1:
+            raise ValueError(
+                "Use only one of 'event_type', 'from_event', or 'type'."
+            )
+
+        if event_type is None:
+            event_type = from_event if from_event is not None else type
+
+        if column is None:
+            column = self.event_column
+
+        if event_type is not None and name == event_type:
+            self.event_intercepts.add(event_type)
+            return self
+
         key = event_type if event_type is not None else "__global__"
         if key not in self.additive_features:
             self.additive_features[key] = []
@@ -392,7 +429,8 @@ class DeconvolutionModel(BaseEstimator):
            configured event type, extracts feature values, and applies
            transforms. Missing event types are padded with zeros.
         2. **Column-building pass**:
-           a. Creates event-specific intercept columns (if ``has_intercept``).
+              a. Creates event-specific intercept columns when registered via
+                  ``add_feature(name=..., from_event=...)`` with ``name == from_event``.
            b. Expands additive features into B-spline bases where configured.
            c. Computes interaction columns from pre-transformed values.
         3. Places feature values at event latencies to build a
@@ -427,7 +465,11 @@ class DeconvolutionModel(BaseEstimator):
         columns: list[np.ndarray] = []
         names: list[str] = []
 
-        all_event_types = set(self.additive_features.keys()) | set(self.interactions.keys())
+        all_event_types = (
+            set(self.additive_features.keys())
+            | set(self.interactions.keys())
+            | set(self.event_intercepts)
+        )
 
         for ev_type in sorted(all_event_types):
             if ev_type == "__global__":
@@ -447,7 +489,8 @@ class DeconvolutionModel(BaseEstimator):
             feature_values: dict[str, np.ndarray] = {}
 
             # --- Intercept ---
-            if self.has_intercept:
+            add_intercept = ev_type in self.event_intercepts
+            if add_intercept:
                 col = np.zeros(n_events)
                 col[mask] = 1.0
                 columns.append(col)
@@ -464,7 +507,7 @@ class DeconvolutionModel(BaseEstimator):
                 spline_cfg = self._resolve_spline_config(feat.name)
                 if spline_cfg is not None:
                     basis = _bspline_basis(vals, spline_cfg)
-                    start_col = 1 if self.has_intercept else 0
+                    start_col = 1 if add_intercept else 0
                     for i in range(start_col, basis.shape[1]):
                         col = np.zeros(n_events)
                         col[mask] = basis[:, i]
@@ -637,7 +680,7 @@ class DeconvolutionModel(BaseEstimator):
             f"tmin={self.tmin:.3f}",
             f"tmax={self.tmax:.3f}",
             f"sfreq={self.sfreq}",
-            f"intercept={self.has_intercept}",
+            f"event_intercepts={len(self.event_intercepts)}",
             f"n_features={len(self.additive_features)}",
             f"n_interactions={len(self.interactions)}",
             f"splines={'on' if self._spline_map else 'off'}",

@@ -68,8 +68,9 @@ y_noisy = simulator.data
 # ── 4. create a model and design matrix ───────────────────────────────────────────
 model = (
     DeconvolutionModel(tmin=-0.1, tmax=0.5, sfreq=256)
-    .add_feature("stimulus", "type", transform=lambda x: (x == "stimulus").astype(float))
-    .add_feature("response", "type", transform=lambda x: (x == "response").astype(float))
+    # name == from_event registers an event-specific intercept.
+    .add_feature("stimulus", from_event="stimulus")
+    .add_feature("response", from_event="response")
 )
 
 X = model.build_design_matrix(events_df, n_samples=len(y_noisy), use_gpu=False)
@@ -83,7 +84,7 @@ print("Coefficients shape:", model.coef_.shape)
 # ── 6. Compare recovered vs ground truth ─────────────────────────────
 
 plot_simulation_kernels(simulator)
-plot_trfs(model, features=["stimulus", "response"])
+plot_trfs(model, features=["stimulus:intercept", "response:intercept"])
 
 # ── 7. Metrics ───────────────────────────────────────────────────────
 score = model.score(X, y_noisy)
