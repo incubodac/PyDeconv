@@ -79,6 +79,8 @@ model = (
     # name == from_event registers an event-specific intercept.
     .add_feature("stimulus", from_event="stimulus")
     .add_feature("response", from_event="response")
+    .add_new_analysis_window("response",tmin=-0.1, tmax=0.2)
+
 )
 
 # alternative would be to use the more efficient Gram matrix approach, but for now we stick with the default design matrix approach.

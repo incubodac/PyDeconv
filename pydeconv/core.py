@@ -311,6 +311,7 @@ class DeconvolutionModel(BaseEstimator):
         self._feature_mean_: np.ndarray | None = None
         self._feature_std_: np.ndarray | None = None
         self.event_intercepts: set[str] = set()
+        self._last_event_scope: str | None = None
 
     # ----- builder helpers -----
 
@@ -369,6 +370,9 @@ class DeconvolutionModel(BaseEstimator):
         if event_type is None:
             event_type = from_event if from_event is not None else type
 
+        if event_type is not None:
+            self._last_event_scope = event_type
+
         if column is None:
             column = self.event_column
 
@@ -408,25 +412,28 @@ class DeconvolutionModel(BaseEstimator):
         if key not in self.interactions:
             self.interactions[key] = []
         self.interactions[key].append((feature_a, feature_b))
+        if event_type is not None:
+            self._last_event_scope = event_type
         return self
 
     def add_new_analysis_window(
         self,
-        event_type: str,
-        tmin: float,
-        tmax: float,
+        event_type: str | None = None,
+        tmin: float | None = None,
+        tmax: float | None = None,
     ) -> "DeconvolutionModel":
         """Register or overwrite an event-specific analysis window.
 
         Parameters
         ----------
-        event_type : str
-            Value from ``events[self.event_column]`` to which this window
-            applies.
         tmin : float
             Window start in seconds relative to event onset.
         tmax : float
             Window end in seconds relative to event onset.
+        event_type : str or None
+            Value from ``events[self.event_column]`` to which this window
+            applies. If None, reuse the last explicit event scope added via
+            ``add_feature(..., from_event=...)`` / ``add_interaction(..., event_type=...)``.
 
         Returns
         -------
@@ -435,10 +442,16 @@ class DeconvolutionModel(BaseEstimator):
 
         Notes
         -----
-        This method currently stores window configuration only.
-        Design-matrix generation still uses the global window and will be
-        extended in a later implementation.
+        Event-specific windows are applied during ``build_design_matrix`` by
+        masking delays outside the configured interval for columns associated
+        with that event type.
         """
+        if tmin is None or tmax is None:
+            raise ValueError("Both tmin and tmax must be provided.")
+
+        if event_type is None:
+            event_type = self._last_event_scope
+
         if not isinstance(event_type, str) or not event_type:
             raise ValueError("event_type must be a non-empty string.")
         if tmin > tmax:
@@ -446,6 +459,16 @@ class DeconvolutionModel(BaseEstimator):
 
         self.analysis_windows[event_type] = (float(tmin), float(tmax))
         return self
+
+    def _window_delay_mask(self, event_type: str) -> np.ndarray:
+        """Return a boolean mask selecting valid delays for an event type."""
+        win = self.analysis_windows.get(event_type)
+        if win is None:
+            return np.ones(len(self.delays_), dtype=bool)
+
+        win_min = int(np.round(win[0] * self.sfreq))
+        win_max = int(np.round(win[1] * self.sfreq))
+        return (self.delays_ >= win_min) & (self.delays_ <= win_max)
 
     # ----- design matrix -----
 
@@ -508,6 +531,7 @@ class DeconvolutionModel(BaseEstimator):
         n_events = len(events)
         columns: list[np.ndarray] = []
         names: list[str] = []
+        column_event_types: list[str] = []
 
         all_event_types = (
             set(self.additive_features.keys())
@@ -539,6 +563,7 @@ class DeconvolutionModel(BaseEstimator):
                 col[mask] = 1.0
                 columns.append(col)
                 names.append(f"{prefix}intercept")
+                column_event_types.append(ev_type)
 
             # --- Additive Features ---
             feats = self.additive_features.get(ev_type, [])
@@ -557,11 +582,13 @@ class DeconvolutionModel(BaseEstimator):
                         col[mask] = basis[:, i]
                         columns.append(col)
                         names.append(f"{prefix}{feat.name}_spl{i}")
+                        column_event_types.append(ev_type)
                 else:
                     col = np.zeros(n_events)
                     col[mask] = vals
                     columns.append(col)
                     names.append(f"{prefix}{feat.name}")
+                    column_event_types.append(ev_type)
 
             # --- Interactions ---
             inters = self.interactions.get(ev_type, [])
@@ -577,6 +604,7 @@ class DeconvolutionModel(BaseEstimator):
                 col[mask] = interaction_vals
                 columns.append(col)
                 names.append(f"{prefix}{feat_a}:{feat_b}")
+                column_event_types.append(ev_type)
 
         if not columns:
             raise ValueError("No features were extracted to build the design matrix.")
@@ -601,6 +629,20 @@ class DeconvolutionModel(BaseEstimator):
             delays=self.delays_.tolist(),
             use_gpu=use_gpu,
         )
+
+        # Apply event-specific analysis windows by masking delay bins per
+        # feature block while preserving the global matrix shape.
+        n_delays = len(self.delays_)
+        for col_idx, ev_type in enumerate(column_event_types):
+            if ev_type == "__global__":
+                continue
+            keep_mask = self._window_delay_mask(ev_type)
+            if np.all(keep_mask):
+                continue
+            start = col_idx * n_delays
+            end = start + n_delays
+            X[:, start:end] *= keep_mask[np.newaxis, :]
+
         return X
 
     # ----- standardisation (private, called from fit) -----

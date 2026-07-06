@@ -21,7 +21,7 @@ else:
     _TORCH_IMPORT_ERROR = None
 
 
-class Tridge(BaseEstimator, RegressorMixin):
+class Tridge(RegressorMixin, BaseEstimator):
     """Torch-based ridge regressor.
 
     Parameters
@@ -46,9 +46,13 @@ class Tridge(BaseEstimator, RegressorMixin):
         self.coefs_ = None
         self.coef_ = None
         self.y_predicted_ = None
+        self.n_features_in_ = None
 
     def fit(self, X, y):
         """Fit ridge coefficients."""
+        x_was_1d = X.ndim == 1 if isinstance(X, torch.Tensor) else np.asarray(X).ndim == 1
+        y_was_1d = y.ndim == 1 if isinstance(y, torch.Tensor) else np.asarray(y).ndim == 1
+
         if not isinstance(X, torch.Tensor):
             X = torch.tensor(X, dtype=torch.float32, device=self.device)
         else:
@@ -67,8 +71,17 @@ class Tridge(BaseEstimator, RegressorMixin):
         betas = torch.linalg.solve(x_tx_reg, x_ty)
 
         self.coefs_ = betas
-        self.coef_ = betas.detach().cpu().numpy()
+        coef_np = betas.detach().cpu().numpy()
+        # Match sklearn convention:
+        # - single target: (n_features,)
+        # - multi-target: (n_targets, n_features)
+        if y_was_1d:
+            coef_np = coef_np.reshape(-1)
+        else:
+            coef_np = coef_np.T
+        self.coef_ = coef_np
         self.y_predicted_ = X @ betas
+        self.n_features_in_ = int(X.shape[1]) if X.ndim > 1 else 1
         return self
 
     def predict(self, X):

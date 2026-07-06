@@ -348,3 +348,53 @@ class TestFitPredictScore:
         model = DeconvolutionModel()
         with pytest.raises(RuntimeError, match="not been fitted"):
             model.predict(np.zeros((10, 3)))
+
+
+@pytest.mark.skipif(
+    not _has_torch,
+    reason="torch is required for shifted_matrix / build_design_matrix",
+)
+class TestEventSpecificAnalysisWindows:
+    """Tests for per-event delay windows in the shifted design matrix."""
+
+    @pytest.fixture()
+    def events_two_types(self):
+        return pd.DataFrame({
+            "latency": [10, 20, 40, 70],
+            "type": ["stimulus", "stimulus", "response", "response"],
+        })
+
+    def test_window_can_infer_last_scoped_event(self):
+        model = (
+            DeconvolutionModel(tmin=-0.1, tmax=0.2, sfreq=100)
+            .add_feature("stimulus", from_event="stimulus")
+            .add_new_analysis_window(tmin=0.0, tmax=0.0)
+        )
+        assert model.analysis_windows["stimulus"] == (0.0, 0.0)
+
+    def test_event_specific_window_masks_delays(self, events_two_types):
+        model = (
+            DeconvolutionModel(tmin=-0.1, tmax=0.1, sfreq=10)
+            .add_feature("stimulus", from_event="stimulus")
+            .add_new_analysis_window(tmin=0.0, tmax=0.0)
+            .add_feature("response", from_event="response")
+        )
+
+        X = model.build_design_matrix(events_two_types, n_samples=120, use_gpu=False)
+
+        n_delays = len(model.delays_)
+        stim_idx = model.feature_names_.index("stimulus:intercept")
+        resp_idx = model.feature_names_.index("response:intercept")
+
+        stim_block = X[:, stim_idx * n_delays: (stim_idx + 1) * n_delays]
+        resp_block = X[:, resp_idx * n_delays: (resp_idx + 1) * n_delays]
+
+        zero_delay_idx = int(np.where(model.delays_ == 0)[0][0])
+        non_zero_delay_idx = [i for i in range(n_delays) if i != zero_delay_idx]
+
+        # Stimulus window is [0, 0], so all non-zero delay columns are masked.
+        assert np.allclose(stim_block[:, non_zero_delay_idx], 0.0)
+        assert np.any(np.abs(stim_block[:, zero_delay_idx]) > 0)
+
+        # Response keeps the global window; therefore non-zero delays remain.
+        assert np.any(np.abs(resp_block[:, non_zero_delay_idx]) > 0)

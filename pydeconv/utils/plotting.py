@@ -168,6 +168,23 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
 
     n_delays = len(model.delays_)
     times = getattr(model, "times_", np.arange(n_delays))
+
+    def _feature_delay_mask(feat_name: str) -> np.ndarray:
+        """Return per-feature delay mask from model.analysis_windows."""
+        if not hasattr(model, "analysis_windows") or ":" not in feat_name:
+            return np.ones(n_delays, dtype=bool)
+
+        event_type = feat_name.split(":", 1)[0]
+        win = model.analysis_windows.get(event_type)
+        if win is None:
+            return np.ones(n_delays, dtype=bool)
+
+        delay_min = int(np.round(win[0] * model.sfreq))
+        delay_max = int(np.round(win[1] * model.sfreq))
+        mask = (model.delays_ >= delay_min) & (model.delays_ <= delay_max)
+        if not np.any(mask):
+            return np.ones(n_delays, dtype=bool)
+        return mask
     
     coef = model.coef_
     if coef.ndim == 1:
@@ -179,8 +196,6 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
         info = mne.create_info(ch_names=ch_names, sfreq=model.sfreq, ch_types=["eeg"] * n_channels)
         top_topos = False  # Dummy info has no sensor coordinates for topomaps
         
-    x_lims = (model.tmin, model.tmax)
-    
     fig = plt.figure(figsize=figsize)
     
     # Layout constants from legacy code
@@ -197,10 +212,16 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
         # Extract data for this TRF: shape (n_channels, n_delays)
         start_idx = n_coeff * n_delays
         end_idx = (n_coeff + 1) * n_delays
-        data = coef[:, start_idx:end_idx]
+        data_full = coef[:, start_idx:end_idx]
+
+        # Event-specific features can have narrower analysis windows.
+        keep_mask = _feature_delay_mask(feat_name)
+        data = data_full[:, keep_mask]
+        times_feat = times[keep_mask]
+        x_lims = (times_feat[0], times_feat[-1])
         
         # Create an Evoked object
-        grand_avg = mne.EvokedArray(data, info, tmin=times[0], verbose=False)
+        grand_avg = mne.EvokedArray(data, info, tmin=times_feat[0], verbose=False)
         grand_avg.nave = None
         
         # Determine global max for symmetric colormap
