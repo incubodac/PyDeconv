@@ -1,83 +1,93 @@
 # PyDeconv
 
-PyDeconv is an open-source Python package for empowering neuroimaging with ERP deconvolution for EEG and MEG data. It includes modules for creating linear models based on experimental features, allowing for the inclusion of interactions and non-linear contributions modeled via B-Splines. Additionally, PyDeconv provides tools to estimate collinearity between features using the VIF module.
+PyDeconv is an open-source Python package for EEG/MEG **deconvolution analysis** — the
+technique of separating overlapping event-related brain responses from continuous
+neural recordings.
 
-## Documentation
+Classical ERP approaches assume events are well-separated in time; in practice they
+overlap (fixations, audio onsets, button presses, etc. all co-occur).  PyDeconv handles
+this by building a **time-expanded design matrix** that accounts for every event
+simultaneously and solves a single regularised linear regression, yielding one temporal
+response function (TRF / rERP) per predictor — even for overlapping event streams.
 
-Find detailed tutorials and examples in the [documentation](#).
+## Features
+
+- Deconvolution of overlapping EEG/MEG events via time-expanded design matrices
+- Fluent **builder API** for defining additive features, interactions, and per-event
+  analysis windows
+- **B-spline basis expansion** for non-linear modelling of continuous covariates
+- Collinearity diagnostics (VIF)
+- Regularised solvers: Ridge, Tridge (time-regularised Ridge), and any
+  scikit-learn-compatible estimator
+- Group-level statistics via TFCE permutation tests (wraps MNE)
+- Interactive **GUI** built with PySide6
+
+## Inputs
+
+| Argument | Accepted formats |
+|---|---|
+| EEG data | `mne.io.Raw` object **or** NumPy array `(channels × samples)` |
+| Events / features | `pandas.DataFrame` (requires a `latency` column in samples) **or** NumPy array |
+
+## Quick start
+
+```python
+import numpy as np
+from pydeconv.core import DeconvolutionModel
+
+model = (
+    DeconvolutionModel(tmin=-0.1, tmax=0.6, sfreq=256)
+
+    # Intercept (mean TRF) for each event type
+    .add_feature("fixation", from_event="fixation")
+    .add_feature("audio",    from_event="audio")
+    .add_feature("button",   from_event="button")
+
+    # Additive covariate with optional transform
+    .add_feature("log_rt", column="reaction_time",
+                 from_event="button", transform=np.log)
+
+    # Interaction term
+    .add_interaction("log_rt", "condition", event_type="button")
+
+    # Event-specific analysis window
+    .add_new_analysis_window("button", tmin=-0.05, tmax=0.3)
+)
+
+# Build design matrix and fit
+X = model.build_design_matrix(events_df, n_samples=raw.n_times)
+model.fit(X, raw.get_data().T)
+```
+
+See [`examples/`](examples/) for complete runnable scripts.
 
 ## Installation
 
-Follow the installation guide in the documentation to get started with PyDeconv.
+```bash
+pip install -e .          # editable install from the repo root
+```
 
-### First-time setup script
+For the GUI, also install PySide6:
 
-Run `./install_deps.sh` only the first time you install the project. It automatically selects an available Python version (≥ 3.9), creates a virtual environment at `.venv`, and installs the required dependencies via `pip` (mne, numpy, scipy, matplotlib, pandas, scikit-learn).
+```bash
+pip install PySide6
+python -m pydeconv.gui
+```
 
 ## Dependencies
 
-The minimum required dependencies to run PyDeconv examples are:
-
 - [Python](https://www.python.org) ≥ 3.9
-- [MNE](https://mne.tools/stable/index.html) ≥ 1.3.1  
+- [MNE](https://mne.tools/stable/index.html) ≥ 1.3.1
 - [NumPy](https://numpy.org) ≥ 1.24.2
 - [SciPy](https://scipy.org) ≥ 1.10.1
 - [Matplotlib](https://matplotlib.org) ≥ 3.6
 - [Pandas](https://pandas.pydata.org) ≥ 2.1.0
-- [scikit-learn](https://scikit-learn.org) ≥ 1.2.2  
-- [art](https://pypi.org/project/art/) >= 6.5
-- any python qt backend, like [pyside6](https://www.qt.io/development/qt-framework/python-bindings)
+- [scikit-learn](https://scikit-learn.org) ≥ 1.2.2
+- [PySide6](https://www.qt.io/development/qt-framework/python-bindings) *(GUI only)*
 
-## Usage
+## Documentation
 
-The main class `PyDeconv` takes three arguments: 
-1. The parsed configurations from `config.py`, 
-2. A `pandas.DataFrame` with columns labeled for event types and predictors, 
-3. EEG data as an `mne` raw object.
-
-To use PyDeconv, ensure that the configuration file and data are properly set up as shown below.
-
-### Example Scripts
-
-#### `example_script.py`
-
-The `example_script.py` demonstrates basic functionalities of PyDeconv. It applies a simple model to example data, It takes the configuration parameters from the config.py file , defines the model and fit it to the data, and then prints out the analysis results.
-
-#### Example Notebook
-
-Additionally, you can use the provided example notebook to run a simple model on a sample dataset, illustrating the entire workflow.
-
-### Example Plots
-
-Here are some example plots generated by running the `example_script.py`:
-
-*rERPs activation plot*  
-![ERP activation example](example_erp_activation.png)
-
-
-## Configuration File (`config.py`)
-
-The `config.py` file defines the key parameters required to run PyDeconv. Formulas for the deconvolution models should follow Wilkinson notation, and the predictor variables must match the column labels in the feature `DataFrame`. The solver can be any linear model compatible with scikit-learn, as described in the [scikit-learn linear model documentation](https://scikit-learn.org/stable/modules/linear_model.html):
-
-```python
-# Example config.py
-events_of_interest = {
-    "first_intercept_event_type": "fixation",
-    "second_intercept_event_type": "saccade",
-    "second_delay": None
-}
-
-model = {
-    "model_name": "targMin",
-    "formula": "y ~  1 + ontarget + scrank*mss", 
-    "second_formula": "y ~ 1 + saccade_amplitude",
-    "tmin": -0.2,
-    "tmax": 0.6,
-    "use_splines": 5,
-    "solver": "ridge",
-    "scoring": "rms",
-    "second_delay": None ,
-    "eeg_chns": 64
+Find detailed tutorials and examples in the [documentation](#).
 }
 
 ```

@@ -1,62 +1,8 @@
 # PyDeconv — Examples
-## What is PyDeconv?
 
-PyDeconv is a Python package for EEG/MEG **deconvolution analysis** — the
-technique of separating overlapping event-related brain responses from
-continuous neural recordings.
-
-Classical ERP approaches assume events are well-separated in time; in practice
-they overlap.  PyDeconv handles this by building a **time-expanded design
-matrix** that accounts for every event simultaneously and solves a single
-regularised linear regression, yielding one temporal response function (TRF /
-rERP) per predictor.
-
-### Inputs
-
-| Argument | Accepted formats |
-|---|---|
-| EEG data | `mne.io.Raw` object **or** NumPy array `(channels × samples)` |
-| Events / features | `pandas.DataFrame` (requires a `latency` column in samples) **or** NumPy array |
-
-### Model definition — fluent builder
-
-Models are defined by chaining calls that register predictors.  Each predictor
-is scoped to a particular **event type** (e.g. `'button'`, `'fixation'`,
-`'audio'`) so that the response to overlapping events can be estimated
-independently:
-
-```python
-from pydeconv.core import DeconvolutionModel
-
-model = (
-    DeconvolutionModel(tmin=-0.1, tmax=0.6, sfreq=256)
-
-    # Intercept (mean TRF) for each event type
-    .add_feature("fixation", from_event="fixation")
-    .add_feature("audio",    from_event="audio")
-    .add_feature("button",   from_event="button")
-
-    # Additive covariate — reaction time (log-transformed)
-    .add_feature("log_rt", column="reaction_time",
-                 from_event="button", transform=np.log)
-
-    # Interaction between two features for the same event type
-    .add_interaction("log_rt", "condition", event_type="button")
-
-    # Event-specific analysis window (narrower epoch around button press)
-    .add_new_analysis_window("button", tmin=-0.05, tmax=0.3)
-)
-```
-
-Continuous features can be expanded into **B-spline bases** by passing a
-`spline_config` argument, allowing non-linear modelling of covariates.
-
----
-
-## Examples in this directory
-This directory contains runnable scripts that demonstrate the PyDeconv
-workflow from end to end: simulation, real-data analysis,
-and the interactive GUI.
+Runnable scripts demonstrating the PyDeconv workflow from simulation through
+group-level analysis and the interactive GUI.
+For a full package overview see the [root README](../README.md).
 
 ---
 
