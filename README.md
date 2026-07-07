@@ -17,7 +17,7 @@ response function (TRF / rERP) per predictor — even for overlapping event stre
   analysis windows
 - **B-spline basis expansion** for non-linear modelling of continuous covariates
 - Collinearity diagnostics (VIF)
-- Regularised solvers: Ridge, Tridge (time-regularised Ridge), and any
+- Regularised solvers: Ridge, Tridge (Ridge regression with Torch compatibility), and any
   scikit-learn-compatible estimator
 - Group-level statistics via TFCE permutation tests (wraps MNE)
 - Interactive **GUI** built with PySide6
