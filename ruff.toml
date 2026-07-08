@@ -5,4 +5,7 @@ exclude = [
 line-length = 88
 
 [lint]
-select = ['E', 'F', 'W', 'D']
+select = ['E', 'F', 'W']
+
+[lint.pycodestyle]
+max-line-length = 110

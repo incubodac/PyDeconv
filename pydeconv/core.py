@@ -222,7 +222,6 @@ def _bspline_basis(
 # DeconvolutionModel
 # ---------------------------------------------------------------------------
 
-
 class DeconvolutionModel(BaseEstimator):
     """Linear deconvolution model for continuous EEG / MEG data.
 
@@ -292,14 +291,16 @@ class DeconvolutionModel(BaseEstimator):
         self.event_column = event_column
 
         if isinstance(additive_features, dict):
-            self.additive_features: dict[str, list[Feature]] = {k: list(v) for k, v in additive_features.items()}
+            self.additive_features = {k: list(v) for k, v in additive_features.items()}
         else:
-            self.additive_features = {"__global__": list(additive_features)} if additive_features else {}
+            features_list = list(additive_features)
+            self.additive_features = {"__global__": features_list} if additive_features else {}
 
         if isinstance(interactions, dict):
-            self.interactions: dict[str, list[tuple[str, str]]] = {k: list(v) for k, v in interactions.items()}
+            self.interactions = {k: list(v) for k, v in interactions.items()}
         else:
-            self.interactions = {"__global__": list(interactions)} if interactions else {}
+            interactions_list = list(interactions)
+            self.interactions = {"__global__": interactions_list} if interactions else {}
 
         self.spline_config = spline_config
         self.estimator = estimator if estimator is not None else Ridge()

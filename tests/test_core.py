@@ -6,7 +6,7 @@ import pytest
 
 # Check optional dependency availability
 try:
-    import torch
+    import torch # noqa: F401
     _has_torch = True
 except ImportError:
     _has_torch = False

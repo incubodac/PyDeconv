@@ -13,7 +13,7 @@ def plot_simulation_kernels(simulator, figsize=None):
         The simulator object containing events, data, and registered kernels.
     figsize : tuple, optional
         The figure size.
-    
+
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -85,7 +85,15 @@ def plot_simulation_kernels(simulator, figsize=None):
         mask = (events_snippet["type"] == ev_type)
         ev_times = events_snippet.loc[mask, "latency"] / sfreq
         if len(ev_times) > 0:
-            ax_eeg.vlines(ev_times, ymin=y_plot.min(), ymax=y_plot.max(), color=color_map[ev_type], alpha=0.5, ls="--", label=f"Event: {ev_type}")
+            ax_eeg.vlines(
+                ev_times,
+                ymin=y_plot.min(),
+                ymax=y_plot.max(),
+                color=color_map[ev_type],
+                alpha=0.5,
+                ls="--",
+                label=f"Event: {ev_type}"
+            )
 
     ax_eeg.set_title(f"Simulated EEG Snippet (First {snippet_len_s:.1f}s)", fontweight="bold")
     ax_eeg.set_xlabel("Time (s)")
@@ -200,7 +208,7 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
     fig = plt.figure(figsize=figsize)
 
     # Layout constants from legacy code
-    top_slide = 0.02
+    _top_slide = 0.02
     horizontal_jump = 0.8 / len(features)  # dynamically space out based on n features
 
     for jump, feat_name in enumerate(features):

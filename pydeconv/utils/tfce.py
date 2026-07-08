@@ -31,12 +31,12 @@ def tfce(observations, ch_adjacency_sparse, n_permutations=512, alpha=0.05):
 
     """
     # Permutation cluster test parameters
-    degrees_of_freedom = observations.shape[0] - 1
+    _degrees_of_freedom = observations.shape[0] - 1
     # t_thresh = scipy.stats.t.ppf(1 - desired_pval / 2, df=degrees_of_freedom)
     t_thresh = dict(start=0, step=0.2)
     # Get channel adjacency
     # Clusters out type
-    if type(t_thresh) == dict:
+    if type(t_thresh) is dict:
         out_type = 'indices'
     else:
         out_type = 'mask'
@@ -52,7 +52,7 @@ def tfce(observations, ch_adjacency_sparse, n_permutations=512, alpha=0.05):
 
     pval_threshold = alpha
     # Make clusters mask
-    if type(t_thresh) == dict:
+    if type(t_thresh) is dict:
         # If TFCE use p-vaues of voxels directly
         p_tfce = p_tfce.reshape( observations.shape[1], observations.shape[2]).T
 

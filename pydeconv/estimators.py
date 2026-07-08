@@ -51,7 +51,6 @@ class Tridge(RegressorMixin, BaseEstimator):
 
     def fit(self, X, y):
         """Fit ridge coefficients."""
-        x_was_1d = X.ndim == 1 if isinstance(X, torch.Tensor) else np.asarray(X).ndim == 1
         y_was_1d = y.ndim == 1 if isinstance(y, torch.Tensor) else np.asarray(y).ndim == 1
 
         if not isinstance(X, torch.Tensor):

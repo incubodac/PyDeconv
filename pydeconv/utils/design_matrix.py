@@ -31,7 +31,7 @@ def shifted_matrix(
         Specific time indices at which to compute rows of the shifted matrix.
         If None, computes all rows.
     output_torch : bool or float, default False
-        If True, returns a PyTorch tensor instead of a NumPy array. 
+        If True, returns a PyTorch tensor instead of a NumPy array.
         If False, returns a NumPy array.
     train_indexes : np.ndarray, optional
         Indices of training samples. If provided, only these indices are used for computation.
@@ -116,7 +116,8 @@ def _compute_shifted(
         idx = torch.tensor(indices_to_keep, device=feats_t.device, dtype=torch.int64)
         idx_shifted = idx[:, None] - delays[None, :]  # Shape: (n_rows, n_delays)
     else:
-        idx_shifted = torch.arange(n_samples, device=feats_t.device)[:, None] - delays[None, :]  # Shape: (n_samples, n_delays)
+        idx = torch.arange(n_samples, device=feats_t.device)
+        idx_shifted = idx[:, None] - delays[None, :]  # Shape: (n_samples, n_delays)
 
     # Mask for valid indices
     valid_mask = (idx_shifted >= 0) & (idx_shifted < n_samples) # Shape: (n_rows, n_delays)

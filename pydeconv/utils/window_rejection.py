@@ -1,7 +1,14 @@
 # Window-based artifact rejection and time-window exclusion utilities
 import numpy as np
 
-def cont_ArtifactDetect(EEG, amplitudeThreshold=150, windowsize=2000, channels=None, stepsize=100, combineSegments=None):
+def cont_ArtifactDetect(
+    EEG,
+    amplitudeThreshold=150,
+    windowsize=2000,
+    channels=None,
+    stepsize=100,
+    combineSegments=None
+):
     """Reject commonly recorded artifactual potentials (c.r.a.p.) in continuous EEG data.
 
     Parameters
@@ -17,7 +24,8 @@ def cont_ArtifactDetect(EEG, amplitudeThreshold=150, windowsize=2000, channels=N
     stepsize : float, optional
         Moving window step (in milliseconds), by default 100.
     combineSegments : float or None, optional
-        Merge adjacent bad intervals closer than this duration (in milliseconds). If None, no merging, by default None.
+        Merge adjacent bad intervals closer than this duration (in milliseconds).
+        If None, no merging, by default None.
 
     Returns
     -------
@@ -146,7 +154,7 @@ def joinclosesegments(WinRej, chanrej, shortisisam):
     WinRej2 = []
     ChanRej2 = []
 
-    print('\nWARNING: Marked segments that are closer than {} samples will be joined together.\n'.format(shortisisam))
+    print(f'\nWARNING: Marked segments that are closer than {shortisisam} samples will be joined together.\n')
 
     a = WinRej[0, 0]
     b = WinRej[0, 1]
