@@ -30,6 +30,7 @@ class Tridge(RegressorMixin, BaseEstimator):
         L2 regularization strength.
     use_gpu : bool
         If ``True`` and CUDA is available, run on GPU.
+
     """
 
     def __init__(self, alpha: float = 1.0, use_gpu: bool = True):

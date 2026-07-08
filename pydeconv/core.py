@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Callable, NamedTuple, Sequence
+from typing import Callable, NamedTuple
 
 import numpy as np
 import pandas as pd
-from scipy.interpolate import BSpline, make_lsq_spline
+from scipy.interpolate import BSpline
 from sklearn.base import BaseEstimator, clone, is_regressor
 from sklearn.linear_model import Ridge
 
@@ -37,6 +37,7 @@ class Feature(NamedTuple):
         before they enter the design matrix.  Can be any callable that
         accepts and returns an array-like (e.g. ``np.log``,
         ``lambda x: x ** 2``).
+
     """
 
     name: str
@@ -68,6 +69,7 @@ class SplineConfig:
         ignored.
     degree : int
         Polynomial degree of the B-spline.  Default is 3 (cubic).
+
     """
 
     n_splines: int = 5
@@ -97,6 +99,7 @@ def _parse_spline_config(
     dict[str, SplineConfig] or None
         ``None`` when splines are disabled; otherwise a dict keyed by
         feature name.
+
     """
     if spec is None or spec is False:
         return None
@@ -152,6 +155,7 @@ def _compute_knots(
     -------
     knots : numpy.ndarray
         Full knot vector of length ``n_interior + 2 * (degree + 1)``.
+
     """
     degree = config.degree
     if config.knots is not None:
@@ -197,6 +201,7 @@ def _bspline_basis(
     -------
     basis : numpy.ndarray, shape ``(n_events, n_splines)``
         Each column is one B-spline basis function evaluated at *values*.
+
     """
     knots = _compute_knots(values, config)
     degree = config.degree
@@ -259,6 +264,7 @@ class DeconvolutionModel(BaseEstimator):
         Scikit-learn regressor instance.  Defaults to ``Ridge()``.
     scoring : str
         Scoring metric name (currently ``'r2'``).
+
     """
 
     def __init__(
@@ -284,7 +290,7 @@ class DeconvolutionModel(BaseEstimator):
         # Intercepts are now controlled per event via add_feature shorthand.
         _ = has_intercept
         self.event_column = event_column
-        
+
         if isinstance(additive_features, dict):
             self.additive_features: dict[str, list[Feature]] = {k: list(v) for k, v in additive_features.items()}
         else:
@@ -356,6 +362,7 @@ class DeconvolutionModel(BaseEstimator):
         ``name == event_type``, this call is treated as a request for an
         event-specific intercept. In that case, the event type is recorded
         in ``event_intercepts`` and no additive feature column is added.
+
         """
         provided = [
             event_type is not None,
@@ -387,8 +394,8 @@ class DeconvolutionModel(BaseEstimator):
         return self
 
     def add_interaction(
-        self, 
-        feature_a: str, 
+        self,
+        feature_a: str,
         feature_b: str,
         event_type: str | None = None,
     ) -> "DeconvolutionModel":
@@ -407,6 +414,7 @@ class DeconvolutionModel(BaseEstimator):
         -------
         self : DeconvolutionModel
             For method chaining.
+
         """
         key = event_type if event_type is not None else "__global__"
         if key not in self.interactions:
@@ -445,6 +453,7 @@ class DeconvolutionModel(BaseEstimator):
         Event-specific windows are applied during ``build_design_matrix`` by
         masking delays outside the configured interval for columns associated
         with that event type.
+
         """
         if tmin is None or tmax is None:
             raise ValueError("Both tmin and tmax must be provided.")
@@ -518,6 +527,7 @@ class DeconvolutionModel(BaseEstimator):
         -------
         X : np.ndarray, shape ``(n_samples, n_columns * n_delays)``
             The complete design matrix.
+
         """
         if "latency" not in events.columns:
             raise ValueError("events DataFrame must contain a 'latency' column")
@@ -659,6 +669,7 @@ class DeconvolutionModel(BaseEstimator):
         -------
         X_std : numpy.ndarray
             Standardised copy of *X*.
+
         """
         self._feature_mean_ = X.mean(axis=0)
         self._feature_std_ = X.std(axis=0)
@@ -689,6 +700,7 @@ class DeconvolutionModel(BaseEstimator):
         Returns
         -------
         self : DeconvolutionModel
+
         """
         if not is_regressor(self.estimator):
             raise TypeError(
@@ -723,6 +735,7 @@ class DeconvolutionModel(BaseEstimator):
         Returns
         -------
         y_pred : numpy.ndarray
+
         """
         if not self.is_fitted:
             raise RuntimeError("Model has not been fitted yet.")
@@ -750,6 +763,7 @@ class DeconvolutionModel(BaseEstimator):
         scores : float or numpy.ndarray
             R² score(s).  A single float when *y* is 1-D, otherwise an
             array of per-channel scores.
+
         """
         from sklearn.metrics import r2_score
 

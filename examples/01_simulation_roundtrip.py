@@ -1,5 +1,4 @@
-"""
-01 — Simulation Round-Trip
+"""01 — Simulation Round-Trip
 ==========================
 Simulate continuous EEG data with known event-related kernels, then run
 the full PyDeconv pipeline to recover them. This script serves as a
@@ -24,7 +23,6 @@ import sys
 # when running this script directly.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import numpy as np
 from pydeconv.core import DeconvolutionModel
 from pydeconv.simulation.simulation import (
     ExperimentDesign,

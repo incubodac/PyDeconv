@@ -37,6 +37,7 @@ def build_uniform_isi_sampler(
     -------
     sampler : ISISampler
         A callable ``(row) -> int``.
+
     """
     rng = rng or np.random.default_rng()
 
@@ -46,8 +47,7 @@ def build_uniform_isi_sampler(
     return _sample
 
 def build_gamma_isi_sampler(mean: int, scale: int = 1, offset: int = 0) -> ISISampler:
-    """
-    Build an ISI sampler that draws from a gamma distribution offseted by offset.
+    """Build an ISI sampler that draws from a gamma distribution offseted by offset.
     
     Parameters
     ----------
@@ -57,6 +57,7 @@ def build_gamma_isi_sampler(mean: int, scale: int = 1, offset: int = 0) -> ISISa
         scale of the gamma distribution. Equivalent to a rate value of 1/scale.
     offset : int
         offset in .samples used to shift the resulting value.
+
     """
     rng = rng or np.random.default_rng()
 
@@ -66,13 +67,13 @@ def build_gamma_isi_sampler(mean: int, scale: int = 1, offset: int = 0) -> ISISa
     return _sample
 
 def build_constant_isi_sampler(value: int = 0) -> ISISampler:
-    """
-    Build an ISI sampler that always returns value for an ISI.
+    """Build an ISI sampler that always returns value for an ISI.
     
     Parameters
     ----------
     value : int
         the ISI value it'll always return.
+
     """
     rng = rng or np.random.default_rng()
 

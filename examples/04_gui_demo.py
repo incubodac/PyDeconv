@@ -1,5 +1,4 @@
-"""
-04 — GUI Demo
+"""04 — GUI Demo
 =============
 Launch the PyDeconv graphical interface for interactive deconvolution
 analysis. The GUI allows loading data, configuring the design matrix,

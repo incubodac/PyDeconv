@@ -1,10 +1,8 @@
 # Window-based artifact rejection and time-window exclusion utilities
 import numpy as np
-import mne
 
 def cont_ArtifactDetect(EEG, amplitudeThreshold=150, windowsize=2000, channels=None, stepsize=100, combineSegments=None):
-    """
-    Reject commonly recorded artifactual potentials (c.r.a.p.) in continuous EEG data.
+    """Reject commonly recorded artifactual potentials (c.r.a.p.) in continuous EEG data.
 
     Parameters
     ----------
@@ -25,20 +23,21 @@ def cont_ArtifactDetect(EEG, amplitudeThreshold=150, windowsize=2000, channels=N
     -------
     WinRej : ndarray, shape (n_segments, 2)
         Marked segments in sample indices (onset, offset).
+
     """
     if channels is None:
         channels = np.arange(EEG.get_data().shape[0])
-    
+
     # Check for EYE-EEG channels
     if hasattr(EEG, 'ch_names') and any('GAZE' in chan for chan in EEG.ch_names):
         print("EYE-Channels detected. It is not recommended to include these channels "
               "in the continuousArtifactDetect() function as the scale is usually very different. "
               "Please remove before using this function or make sure you correctly "
               "indicate channels to be considered.")
-    
+
     amp_th = amplitudeThreshold  # in uV
     winms = windowsize  # in ms
-    stepms = stepsize  # in ms 
+    stepms = stepsize  # in ms
     chanArray = channels  # which channels to check?
     shortisi = combineSegments  # merge adjacent bad intervals?
 
@@ -50,15 +49,15 @@ def cont_ArtifactDetect(EEG, amplitudeThreshold=150, windowsize=2000, channels=N
         if shortisi is not None:
             shortisisam = int(np.floor(shortisi * EEG.info['sfreq'] / 1000))  # to samples
             WinRej, chanrej = joinclosesegments(WinRej, chanrej, shortisisam)
-        
+
         throw_out = np.array([1])
         while throw_out.size > 0:
             throw_out = np.array([], dtype=int)
-            
+
             for i in range(WinRej.shape[0] - 1):
                 if throw_out.size > 0 and throw_out[-1] == i:
                     continue
-                
+
                 if WinRej[i, 1] >= WinRej[i + 1, 0]:
                     throw_out = np.append(throw_out, i + 1)
                     WinRej[i, 0] = min(WinRej[i, 0], WinRej[i + 1, 0])
@@ -75,8 +74,7 @@ def cont_ArtifactDetect(EEG, amplitudeThreshold=150, windowsize=2000, channels=N
     return WinRej
 
 def basicrap(EEG, chanArray, ampth, winms, stepms):
-    """
-    Basic artifact rejection algorithm checking max peak-to-peak amplitude in moving windows.
+    """Basic artifact rejection algorithm checking max peak-to-peak amplitude in moving windows.
 
     Parameters
     ----------
@@ -97,6 +95,7 @@ def basicrap(EEG, chanArray, ampth, winms, stepms):
         Onset and offset sample indices of detected artifact windows.
     chanrej : ndarray, shape (n_segments, n_channels)
         Binary matrix indicating which channels exceeded the threshold in each segment.
+
     """
     nchan = len(chanArray)
     srate = EEG.info['sfreq']  # Sampling rate in Hz
@@ -122,8 +121,7 @@ def basicrap(EEG, chanArray, ampth, winms, stepms):
     return WinRej, chanrej
 
 def joinclosesegments(WinRej, chanrej, shortisisam):
-    """
-    Merge adjacent marked segments that are closer than a threshold.
+    """Merge adjacent marked segments that are closer than a threshold.
 
     Parameters
     ----------
@@ -140,15 +138,16 @@ def joinclosesegments(WinRej, chanrej, shortisisam):
         Merged onset and offset sample indices.
     ChanRej2 : ndarray, shape (n_merged_segments, n_channels)
         Binary channel rejection matrix for merged segments.
+
     """
     if WinRej.shape[0] == 0:
         return WinRej, chanrej
 
     WinRej2 = []
     ChanRej2 = []
-    
+
     print('\nWARNING: Marked segments that are closer than {} samples will be joined together.\n'.format(shortisisam))
-    
+
     a = WinRej[0, 0]
     b = WinRej[0, 1]
     working = 0
@@ -182,5 +181,5 @@ def joinclosesegments(WinRej, chanrej, shortisisam):
         ChanRej2.append(chanrej[-1, :])
 
     ChanRej2 = [list(map(int, c)) for c in ChanRej2]
-    
+
     return np.array(WinRej2), np.array(ChanRej2)

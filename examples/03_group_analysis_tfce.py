@@ -1,5 +1,4 @@
-"""
-03 — Group Analysis with TFCE
+"""03 — Group Analysis with TFCE
 =============================
 Run threshold-free cluster enhancement (TFCE) across multiple subjects
 to identify statistically significant spatio-temporal clusters in the

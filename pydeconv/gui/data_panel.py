@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QTableView,
     QVBoxLayout,
     QWidget,
-    QLabel,
     QProgressBar,
     QGroupBox,
 )
@@ -38,6 +37,7 @@ class ChannelInfoModel(QAbstractTableModel):
     ----------
     raw : mne.io.BaseRaw or None
         If provided, immediately populate from the Raw's info dict.
+
     """
 
     _HEADERS = ("Channel", "Type", "Unit")
@@ -90,6 +90,7 @@ class ChannelStatsModel(QAbstractTableModel):
     ----------
     stats : list of dict or None
         Each dict has keys: channel, mean, std, min, max, median.
+
     """
 
     _HEADERS = ("Channel", "Mean", "Std", "Min", "Max", "Median")
@@ -145,6 +146,7 @@ class DataInfoPanel(QWidget):
     ----------
     parent : QWidget or None
         Parent widget.
+
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -163,6 +165,7 @@ class DataInfoPanel(QWidget):
         ----------
         raw : mne.io.BaseRaw
             The loaded raw EEG data.
+
         """
         self._raw = raw
         self._info_model.set_raw(raw)

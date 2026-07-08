@@ -44,6 +44,7 @@ class FileLoaderWorker(QRunnable):
     ----------
     filepath : str
         Absolute path to the EEG file (.set, .edf, .bdf, .vhdr, .fif).
+
     """
 
     def __init__(self, filepath: str) -> None:
@@ -71,6 +72,7 @@ class StatsWorker(QRunnable):
     ----------
     raw : mne.io.BaseRaw
         The loaded raw data.
+
     """
 
     def __init__(self, raw: mne.io.BaseRaw) -> None:
@@ -122,6 +124,7 @@ def _load_raw(filepath: str) -> mne.io.BaseRaw:
     -------
     raw : mne.io.BaseRaw
         Loaded raw data (preloaded into memory).
+
     """
     ext = filepath.rsplit(".", maxsplit=1)[-1].lower()
     loaders = {
@@ -156,6 +159,7 @@ class EventsLoaderWorker(QRunnable):
     ----------
     filepath : str
         Absolute path to the events file.
+
     """
 
     def __init__(self, filepath: str) -> None:
@@ -188,6 +192,7 @@ def _load_events(filepath: str) -> pd.DataFrame:
     -------
     df : pd.DataFrame
         Loaded events table.
+
     """
     ext = filepath.rsplit(".", maxsplit=1)[-1].lower()
 
