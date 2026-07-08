@@ -1,5 +1,4 @@
-"""
-03 — Group Analysis with TFCE
+"""03 — Group Analysis with TFCE
 =============================
 Run threshold-free cluster enhancement (TFCE) across multiple subjects
 to identify statistically significant spatio-temporal clusters in the
@@ -26,7 +25,10 @@ Steps
 # for sid in subject_ids:
 #     data = np.load(f"output/{sid}_coeffs.npz")
 #     coefficients.append(data["kernel_stimulus"])  # shape: (n_times, n_channels)
-# observations = np.stack(coefficients, axis=0)  # shape: (n_subjects, n_times, n_channels)
+# observations = np.stack(
+#   coefficients,
+#   axis=0
+# )  # shape: (n_subjects, n_times, n_channels)
 
 # ── 2. Channel adjacency ────────────────────────────────────────────
 # # Use the info from any subject (all share the same montage)
@@ -43,4 +45,8 @@ Steps
 # print(f"Significant voxels at α={pval_threshold}: {clusters_mask.sum()}")
 
 # ── 4. Visualise ─────────────────────────────────────────────────────
-# plot_tfce_clusters(clusters_mask, raw.info, times=np.linspace(-0.1, 0.5, observations.shape[1]))
+# plot_tfce_clusters(
+#   clusters_mask,
+#   raw.info,
+#   times=np.linspace(-0.1, 0.5, observations.shape[1])
+#)

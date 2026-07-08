@@ -1,12 +1,11 @@
 # Threshold-Free Cluster Enhancement (TFCE) and group-level analysis helpers
 
 import numpy as np
-import mne 
+import mne
 import scipy.sparse
 
 def tfce(observations, ch_adjacency_sparse, n_permutations=512, alpha=0.05):
-    """
-    Threshold-Free Cluster Enhancement (TFCE) group analysis.
+    """Threshold-Free Cluster Enhancement (TFCE) group analysis.
 
     Note: This function is a direct wrapper around MNE-Python's permutation
     cluster 1-sample test logic, using the library's permutation testing and
@@ -29,30 +28,31 @@ def tfce(observations, ch_adjacency_sparse, n_permutations=512, alpha=0.05):
         Boolean mask indicating significant clusters/features.
     pval_threshold : float
         The alpha significance threshold used.
+
     """
     # Permutation cluster test parameters
-    degrees_of_freedom = observations.shape[0] - 1
+    _degrees_of_freedom = observations.shape[0] - 1
     # t_thresh = scipy.stats.t.ppf(1 - desired_pval / 2, df=degrees_of_freedom)
     t_thresh = dict(start=0, step=0.2)
     # Get channel adjacency
     # Clusters out type
-    if type(t_thresh) == dict:
+    if type(t_thresh) is dict:
         out_type = 'indices'
     else:
         out_type = 'mask'
 
     # Permutations cluster test (TFCE if t_thresh as dict)
-    t_tfce, clusters, p_tfce, H0 = mne.stats.permutation_cluster_1samp_test(X=observations, 
+    t_tfce, clusters, p_tfce, H0 = mne.stats.permutation_cluster_1samp_test(X=observations,
                                                                     threshold=t_thresh,
                                                                     adjacency=ch_adjacency_sparse,
                                                                     n_permutations=n_permutations,
-                                                                    tail=0, 
-                                                                    out_type=out_type, 
+                                                                    tail=0,
+                                                                    out_type=out_type,
                                                                     n_jobs=-1)
 
     pval_threshold = alpha
     # Make clusters mask
-    if type(t_thresh) == dict:
+    if type(t_thresh) is dict:
         # If TFCE use p-vaues of voxels directly
         p_tfce = p_tfce.reshape( observations.shape[1], observations.shape[2]).T
 

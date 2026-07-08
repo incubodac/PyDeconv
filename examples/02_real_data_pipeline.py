@@ -1,5 +1,4 @@
-"""
-02 — Real Data Pipeline
+"""02 — Real Data Pipeline
 =======================
 Load a real EEG dataset (EEGLAB .set format), pair it with a behavioural
 events table, build a design matrix with spline features, fit a deconvolution

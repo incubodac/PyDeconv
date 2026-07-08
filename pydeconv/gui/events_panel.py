@@ -33,6 +33,7 @@ class EventsTableModel(QAbstractTableModel):
     ----------
     df : pd.DataFrame or None
         Initial data.  Can be replaced later via :meth:`set_dataframe`.
+
     """
 
     def __init__(
@@ -90,6 +91,7 @@ class EventsPanel(QWidget):
     ----------
     parent : QWidget or None
         Parent widget.
+
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -108,6 +110,7 @@ class EventsPanel(QWidget):
             The events table.
         filename : str
             Display name for the source file.
+
         """
         self._df = df
         self._model.set_dataframe(df)

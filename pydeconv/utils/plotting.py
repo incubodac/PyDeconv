@@ -1,6 +1,5 @@
 # Plotting methods (coefficients/kernels, design matrices, metrics, and waveforms)
 
-from matplotlib import axes
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -14,17 +13,18 @@ def plot_simulation_kernels(simulator, figsize=None):
         The simulator object containing events, data, and registered kernels.
     figsize : tuple, optional
         The figure size.
-    
+
     Returns
     -------
     fig : matplotlib.figure.Figure
+
     """
     from scipy.signal import welch
 
     events = getattr(simulator, "events", None)
     y = getattr(simulator, "data", None)
     sfreq = getattr(simulator, "sfreq", 256)
-    
+
     if events is None or y is None:
         raise ValueError("Simulator must have 'events' and 'data' (ensure you called simulate()).")
 
@@ -48,7 +48,7 @@ def plot_simulation_kernels(simulator, figsize=None):
 
         times = gt_kernel.time
         gt_waveform = gt_kernel.waveform
-        
+
         ax.plot(times, gt_waveform, color="tab:red", ls="-", lw=2, label="Ground Truth (Simulated)")
 
         ax.set_title(f"Kernel: {feature_name}", fontweight="bold")
@@ -56,7 +56,7 @@ def plot_simulation_kernels(simulator, figsize=None):
         ax.axhline(0, color="k", lw=0.5, ls="--")
         ax.axvline(0, color="k", lw=0.5, ls="-")
         ax.legend(loc="upper right")
-        
+
         if i == n_features - 1:
             ax.set_xlabel("Time (s)")
 
@@ -65,7 +65,7 @@ def plot_simulation_kernels(simulator, figsize=None):
     snippet_len_s = min(10.0, len(y) / sfreq)
     snippet_len_samples = int(snippet_len_s * sfreq)
     t_eeg = np.arange(snippet_len_samples) / sfreq
-    
+
     if y.ndim > 1:
         y_plot = y[:snippet_len_samples, 0]
         y_lbl = "EEG (Channel 0)"
@@ -74,7 +74,7 @@ def plot_simulation_kernels(simulator, figsize=None):
         y_lbl = "EEG"
 
     ax_eeg.plot(t_eeg, y_plot, color="black", lw=1, alpha=0.8, label=y_lbl)
-    
+
     latency_s = events["latency"] / sfreq
     events_snippet = events[latency_s <= snippet_len_s]
     unique_types = events["type"].unique()
@@ -85,7 +85,15 @@ def plot_simulation_kernels(simulator, figsize=None):
         mask = (events_snippet["type"] == ev_type)
         ev_times = events_snippet.loc[mask, "latency"] / sfreq
         if len(ev_times) > 0:
-            ax_eeg.vlines(ev_times, ymin=y_plot.min(), ymax=y_plot.max(), color=color_map[ev_type], alpha=0.5, ls="--", label=f"Event: {ev_type}")
+            ax_eeg.vlines(
+                ev_times,
+                ymin=y_plot.min(),
+                ymax=y_plot.max(),
+                color=color_map[ev_type],
+                alpha=0.5,
+                ls="--",
+                label=f"Event: {ev_type}"
+            )
 
     ax_eeg.set_title(f"Simulated EEG Snippet (First {snippet_len_s:.1f}s)", fontweight="bold")
     ax_eeg.set_xlabel("Time (s)")
@@ -98,7 +106,7 @@ def plot_simulation_kernels(simulator, figsize=None):
         mask = (events["type"] == ev_type)
         ev_times = events.loc[mask, "latency"] / sfreq
         ax_raster.scatter(ev_times, np.full_like(ev_times, i), color=color_map[ev_type], s=10, label=ev_type)
-    
+
     ax_raster.set_yticks(range(len(unique_types)))
     ax_raster.set_yticklabels(unique_types)
     ax_raster.set_title("Event Occurrences", fontweight="bold")
@@ -157,12 +165,13 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
     -------
     fig : matplotlib.figure.Figure
         The resulting figure.
+
     """
     import mne
-    
+
     if getattr(model, "coef_", None) is None:
         raise ValueError("Model is not fitted. Cannot plot TRFs.")
-    
+
     if features is None:
         features = [f for f in model.feature_names_ if f != "intercept"]
 
@@ -185,30 +194,30 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
         if not np.any(mask):
             return np.ones(n_delays, dtype=bool)
         return mask
-    
+
     coef = model.coef_
     if coef.ndim == 1:
         coef = coef[np.newaxis, :]
-        
+
     if info is None:
         n_channels = coef.shape[0]
         ch_names = [f"ch_{i}" for i in range(n_channels)]
         info = mne.create_info(ch_names=ch_names, sfreq=model.sfreq, ch_types=["eeg"] * n_channels)
         top_topos = False  # Dummy info has no sensor coordinates for topomaps
-        
+
     fig = plt.figure(figsize=figsize)
-    
+
     # Layout constants from legacy code
-    top_slide = 0.02
+    _top_slide = 0.02
     horizontal_jump = 0.8 / len(features)  # dynamically space out based on n features
-    
+
     for jump, feat_name in enumerate(features):
         try:
             n_coeff = model.feature_names_.index(feat_name)
         except ValueError:
             print(f"Warning: Feature '{feat_name}' not found in model. Skipping.")
             continue
-            
+
         # Extract data for this TRF: shape (n_channels, n_delays)
         start_idx = n_coeff * n_delays
         end_idx = (n_coeff + 1) * n_delays
@@ -219,21 +228,21 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
         data = data_full[:, keep_mask]
         times_feat = times[keep_mask]
         x_lims = (times_feat[0], times_feat[-1])
-        
+
         # Create an Evoked object
         grand_avg = mne.EvokedArray(data, info, tmin=times_feat[0], verbose=False)
         grand_avg.nave = None
-        
+
         # Determine global max for symmetric colormap
         vmax = np.max(np.abs(data))
         vlim = (-vmax, vmax)
-        
+
         # Calculate horizontal position dynamically
         x0 = 0.05 + jump * horizontal_jump
         width = horizontal_jump - 0.05
-        
+
         ax_frp = fig.add_axes((x0, 0.47, width, 0.2))
-        
+
         if top_topos:
             # We place 3 topomaps directly above the line plot
             topo_w = width * 0.25
@@ -243,20 +252,20 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
             ax_topo3 = fig.add_axes((x0 + 2*(topo_w + gap), 0.75, topo_w, 0.15))
             ax_topo_cb = fig.add_axes((x0 + 3*(topo_w + gap), 0.75, width * 0.02, 0.15))
             axs_topos = [ax_topo1, ax_topo2, ax_topo3, ax_topo_cb]
-            
+
             grand_avg.plot_joint(
                 title="",
                 ts_args={'xlim': x_lims, 'axes': ax_frp, 'titles': dict(eeg=''), 'window_title': ''},
                 topomap_args={'vlim': vlim, 'contours': 2, 'axes': axs_topos, 'size': 0.8},
                 show=False
             )
-            
+
             # Format topomap colorbar
             ax_cb = axs_topos[-1]
             ax_cb.set_title(r'$\mu V$', fontsize=10)
             for top in axs_topos:
                 top.title.set_fontsize(10)
-                
+
         else:
             grand_avg.plot(
                 axes=ax_frp,
@@ -265,18 +274,18 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
                 xlim=x_lims,
                 show=False
             )
-            
+
         # Clean up axes
         ax_frp.set_xlabel("Time (s)")
         ax_frp.set_title(f"{feat_name}", fontweight="bold", pad=15)
         if jump > 0:
             ax_frp.set_ylabel("")
             ax_frp.set_yticklabels([])
-            
+
         # Remove any unwanted text like '(64 channels)'
         for c in ax_frp.get_children():
             if isinstance(c, plt.Text) and 'channels' in c.get_text():
                 c.remove()
-                
+
     fig.legends = []
     return fig

@@ -1,5 +1,4 @@
-"""
-01 — Simulation Round-Trip
+"""01 — Simulation Round-Trip
 ==========================
 Simulate continuous EEG data with known event-related kernels, then run
 the full PyDeconv pipeline to recover them. This script serves as a
@@ -19,12 +18,12 @@ Steps
 
 import os
 import sys
+import matplotlib.pyplot as plt
 
 # Ensure the parent directory is in the Python path so 'pydeconv' can be imported
 # when running this script directly.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import numpy as np
 from pydeconv.core import DeconvolutionModel
 from pydeconv.simulation.simulation import (
     ExperimentDesign,
@@ -75,7 +74,12 @@ y_noisy = simulator.data
 # )
 #custom ridge estimator
 model = (
-    DeconvolutionModel(tmin=-0.1, tmax=0.5, sfreq=256, estimator=Tridge(alpha=1.0, use_gpu=False))
+    DeconvolutionModel(
+        tmin=-0.1,
+        tmax=0.5,
+        sfreq=256,
+        estimator=Tridge(alpha=1.0, use_gpu=False)
+    )
     # name == from_event registers an event-specific intercept.
     .add_feature("stimulus", from_event="stimulus")
     .add_feature("response", from_event="response")
@@ -83,7 +87,8 @@ model = (
 
 )
 
-# alternative would be to use the more efficient Gram matrix approach, but for now we stick with the default design matrix approach.
+# alternative would be to use the more efficient Gram matrix approach, but for now
+# we stick with the default design matrix approach.
 # X = model.build_gram_matrix(events_df, n_samples=len(y_noisy), use_gpu=False)
 X = model.build_design_matrix(events_df, n_samples=len(y_noisy), use_gpu=False)
 print("Design matrix shape:", X.shape)
@@ -102,5 +107,4 @@ plot_trfs(model, features=["stimulus:intercept", "response:intercept"])
 score = model.score(X, y_noisy)
 print(f"R² score: {score:.4f}")
 
-import matplotlib.pyplot as plt
 plt.show()

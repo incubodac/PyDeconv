@@ -34,6 +34,7 @@ class MainWindow(QMainWindow):
     ----------
     parent : QWidget or None
         Parent widget.
+
     """
 
     _FILE_FILTERS = (

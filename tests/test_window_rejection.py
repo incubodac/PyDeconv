@@ -1,9 +1,9 @@
 import numpy as np
-import pytest
 from pydeconv.utils.window_rejection import basicrap, cont_ArtifactDetect, joinclosesegments
 
 class MockEEGArray:
     """Mock EEG class mimicking minimal MNE Raw structure needed for window rejection."""
+
     def __init__(self, data, sfreq, ch_names=None):
         self.data = data
         self.info = {'sfreq': sfreq}
@@ -31,7 +31,7 @@ def test_window_rejection_synthetic():
     # Artifact 1: around 2.0s (sample 1000) on Channel 0 & 1
     data[0, 1000] = 5.0
     data[1, 1000] = 5.0
-    
+
     # Artifact 2: around 6.0s (sample 3000) on Channel 2
     data[2, 3000] = 5.0
 
@@ -46,7 +46,7 @@ def test_window_rejection_synthetic():
 
     # 1. Test basicrap
     win_rej, chan_rej = basicrap(eeg, channels, amplitude_threshold, window_ms, step_ms)
-    
+
     # Check that basicrap detected artifacts
     assert win_rej.size > 0
     # Artifact at 1000 (2.0s) should be detected in windows overlapping sample 1000
@@ -64,7 +64,7 @@ def test_window_rejection_synthetic():
         stepsize=step_ms,
         combineSegments=1000
     )
-    
+
     assert win_rej_cont.size > 0
     # Check that segments are successfully marked
     assert win_rej_cont.shape[0] >= 1
@@ -112,7 +112,7 @@ def test_eye_gaze_warning(capsys):
 
     # Run detection
     cont_ArtifactDetect(eeg, amplitudeThreshold=1.0, windowsize=100, channels=[0, 1])
-    
+
     # Check that warning message was printed to stdout
     captured = capsys.readouterr()
     assert "EYE-Channels detected" in captured.out

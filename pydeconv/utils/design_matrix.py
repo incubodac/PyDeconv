@@ -2,7 +2,7 @@
 import numpy as np
 # pyrefly: ignore [missing-import]
 import torch
-from typing import Sequence, Optional   
+from typing import Sequence, Optional
 
 def shifted_matrix(
     features: np.ndarray,
@@ -13,8 +13,7 @@ def shifted_matrix(
     train_indexes: np.ndarray = None,
     pred_indexes: np.ndarray = None,
     ) -> np.ndarray:
-    """
-    Build a time-shifted design matrix for given features and delays.
+    """Build a time-shifted design matrix for given features and delays.
 
     This function stacks time-shifted versions of the input feature matrix along the second axis,
     optionally computing only for specified row indices to reduce memory.
@@ -32,7 +31,7 @@ def shifted_matrix(
         Specific time indices at which to compute rows of the shifted matrix.
         If None, computes all rows.
     output_torch : bool or float, default False
-        If True, returns a PyTorch tensor instead of a NumPy array. 
+        If True, returns a PyTorch tensor instead of a NumPy array.
         If False, returns a NumPy array.
     train_indexes : np.ndarray, optional
         Indices of training samples. If provided, only these indices are used for computation.
@@ -43,6 +42,7 @@ def shifted_matrix(
     -------
     np.ndarray, shape (n_rows, n_features * n_delays)
         Design matrix where each row contains concatenated features for each delay.
+
     """
     # Determine device order: try GPU first, then CPU
     preferred = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
@@ -60,21 +60,21 @@ def shifted_matrix(
                 feats_t = torch.tensor(feats, dtype=torch.float32, device=dev)
             else:
                 feats_t = feats.to(dtype=torch.float32, device=dev)
-                        
+
             shifted = _compute_shifted(feats_t, delays, indices_to_keep)
-            
+
             # Reshape: (n_rows, n_delays, n_features) -> (n_rows, n_features * n_delays)
             n_rows, n_delays, n_feat = shifted.shape
             mat = shifted.permute(0, 2, 1).reshape(n_rows, n_feat * n_delays)
             if train_indexes is not None and pred_indexes is not None:
                 if output_torch:
                     return mat[train_indexes, :], mat[pred_indexes, :]
-                else: 
+                else:
                     return mat[train_indexes, :].cpu().numpy(), mat[pred_indexes, :].cpu().numpy()
             else:
                 if output_torch:
                     return mat
-                else: 
+                else:
                     return mat.cpu().numpy()
 
         except RuntimeError as e:
@@ -92,8 +92,7 @@ def _compute_shifted(
     delays: Sequence[int],
     indices_to_keep: Optional[Sequence[int]]
 ) -> torch.Tensor:
-    """
-    Compute shifted matrix for given features and delays.
+    """Compute shifted matrix for given features and delays.
 
     Parameters
     ----------
@@ -108,6 +107,7 @@ def _compute_shifted(
     -------
     torch.Tensor
         Shifted matrix of shape (n_rows, n_delays, n_features).
+
     """
     n_samples, n_features = feats_t.shape
     delays = torch.tensor(delays, device=feats_t.device, dtype=torch.int64)
@@ -116,17 +116,18 @@ def _compute_shifted(
         idx = torch.tensor(indices_to_keep, device=feats_t.device, dtype=torch.int64)
         idx_shifted = idx[:, None] - delays[None, :]  # Shape: (n_rows, n_delays)
     else:
-        idx_shifted = torch.arange(n_samples, device=feats_t.device)[:, None] - delays[None, :]  # Shape: (n_samples, n_delays)
+        idx = torch.arange(n_samples, device=feats_t.device)
+        idx_shifted = idx[:, None] - delays[None, :]  # Shape: (n_samples, n_delays)
 
     # Mask for valid indices
     valid_mask = (idx_shifted >= 0) & (idx_shifted < n_samples) # Shape: (n_rows, n_delays)
 
     # Clamp indices to valid range (i.e: ensure values are between 0 and n_samples-1)
     idx_clipped = idx_shifted.clamp(0, n_samples - 1)
-    
+
     # Gather features and apply the mask
     feats_exp = feats_t[idx_clipped]  # Shape: (n_rows, n_delays, n_features)
-    
+
     # Broadcast mask to match feature dimensions (unsqueeze to add feature dimension)
     feats_exp *= valid_mask.unsqueeze(-1)  # Shape: (n_rows, n_delays, n_features)
 
@@ -147,6 +148,7 @@ def ensure_contiguous_and_finite(X: np.ndarray, name: Optional[str] = None) -> n
     -------
     X_clean : np.ndarray
         A C-contiguous array with NaN/Inf values replaced by 0.0.
+
     """
     ctx = f" for {name}" if name else ""
     if not X.flags["C_CONTIGUOUS"]:
@@ -159,12 +161,11 @@ def ensure_contiguous_and_finite(X: np.ndarray, name: Optional[str] = None) -> n
 
 
 def kept_idxs(feature_tensor, tmin, tmax, sampling_rate, axis=0):
-    """
-    Get the indices of the interesting samples to estimate the kernel in a vectorized way.
+    """Get the indices of the interesting samples to estimate the kernel in a vectorized way.
     Uses a difference-array approach to find which indices fall into the window defined
     around each event from tmin to tmax (in seconds).
 
-    Parameters:
+    Parameters
     ----------
     feature_tensor : torch.Tensor
         A 1D tensor representing the feature (e.g., a binary marker for events).
@@ -177,10 +178,11 @@ def kept_idxs(feature_tensor, tmin, tmax, sampling_rate, axis=0):
     axis : int
         The axis along which to find the indices. Default is 0.
 
-    Returns:
+    Returns
     -------
     kept_indices : list
         Sorted list of unique indices that fall in the union of all event windows.
+
     """
     feature_np = feature_tensor.cpu().numpy()
     event_idxs = np.nonzero(feature_np)[axis]

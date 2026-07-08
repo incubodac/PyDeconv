@@ -57,6 +57,7 @@ def assign_event_latencies(
     -------
     events : pandas.DataFrame
         Copy of *events* with a ``latency`` column (cumulative, in samples).
+
     """
     out = events.copy()
     latencies: list[int] = []
@@ -95,6 +96,7 @@ class ERPKernel:
         Kernel shape: ``'gaussian'`` or ``'hanning'``.
     label : str or None
         Human-readable label (e.g. ``'P1'``, ``'N170'``).
+
     """
 
     def __init__(
@@ -179,6 +181,7 @@ class ERPKernel:
         Returns
         -------
         ax : matplotlib.axes.Axes
+
         """
         if ax is None:
             _, ax = plt.subplots(figsize=(6, 3), tight_layout=True)
@@ -206,6 +209,7 @@ class CompoundKernel:
         Identifier for this kernel (used as key in ``EEGSimulator``).
     sfreq : float
         Sampling frequency in Hz.
+
     """
 
     def __init__(self, name: str, sfreq: float):
@@ -245,6 +249,7 @@ class CompoundKernel:
         -------
         self : CompoundKernel
             For method chaining.
+
         """
         self.components.append(
             ERPKernel(
@@ -270,6 +275,7 @@ class CompoundKernel:
         ----------
         show_components : bool
             If True, overlay each component as a thin dashed line.
+
         """
         _, ax = plt.subplots(figsize=(7, 3.5), tight_layout=True)
         ax.plot(self.time * 1e3, self.waveform, "k", lw=1.5, label="sum")
@@ -307,6 +313,7 @@ class EEGSimulator:
         Sampling frequency in Hz.
     duration : float
         Total signal duration in seconds.
+
     """
 
     def __init__(self, sfreq: float, duration: float):
@@ -336,6 +343,7 @@ class EEGSimulator:
             A function ``(event_row: pd.Series) -> bool`` that decides whether
             this kernel fires for a given event.  If None, the kernel fires for
             every event.
+
         """
         if activation is None:
             activation = lambda _row: True  # noqa: E731
@@ -354,6 +362,7 @@ class EEGSimulator:
         ----------
         events : pandas.DataFrame
             Must contain a ``'latency'`` column (in samples).
+
         """
         self.events = events.copy()
         self.component_sticks = {}
@@ -383,6 +392,7 @@ class EEGSimulator:
         -------
         data : numpy.ndarray, shape ``(n_samples,)``
             The simulated EEG signal.
+
         """
         self.data = np.zeros(self.n_samples)
         for comp_kernel, _ in self.kernels:
@@ -415,6 +425,7 @@ class EEGSimulator:
             Standard deviation of the resulting noise.
         rng : numpy.random.Generator or None
             Random number generator for reproducibility.
+
         """
         rng = rng or np.random.default_rng()
         exponents = {"white": 0.0, "pink": 0.5, "brown": 1.0}
@@ -466,6 +477,7 @@ class EEGSimulator:
         -------
         data : numpy.ndarray, shape ``(n_samples,)``
             Simulated EEG signal with noise.
+
         """
         self.set_events(events)
         self.simulate()
@@ -486,6 +498,7 @@ class EEGSimulator:
             Function ``(event_row: pd.Series) -> str`` returning a category
             label used for colour-coding event markers.  Defaults to using
             the ``'type'`` column if present, otherwise ``'event'``.
+
         """
         if event_category is None:
             event_category = lambda evt: evt.get("type", "event")  # noqa: E731
@@ -548,6 +561,7 @@ class TrialVariable:
     static_across_trial : bool
         If True, generate one value per *trial* and broadcast to all events
         in that trial.  If False, generate one value per *event*.
+
     """
 
     def __init__(
@@ -575,6 +589,7 @@ class TrialStructure:
         Variable specifications.
     seed : int or None
         Seed for the random number generator.
+
     """
 
     def __init__(
@@ -609,6 +624,7 @@ class TrialStructure:
         -------
         self : TrialStructure
             For method chaining.
+
         """
         self.variables.append(
             TrialVariable(
@@ -631,6 +647,7 @@ class TrialStructure:
         -------
         events : pandas.DataFrame
             One row per event, columns from the registered variables.
+
         """
         events = pd.DataFrame(index=range(n_events))
 
@@ -679,6 +696,7 @@ class ExperimentDesign:
         Additional covariates.
     seed : int or None
         RNG seed for reproducibility.
+
     """
 
     def __init__(
@@ -724,6 +742,7 @@ class ExperimentDesign:
             Columns include ``type``, ``latency`` (samples),
             ``latency_s`` (seconds), plus any user-defined variables.
             Events exceeding ``duration_s`` are dropped.
+
         """
         max_sample = int(self.duration_s * self.sfreq)
 

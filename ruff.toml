@@ -1,0 +1,11 @@
+exclude = [
+    '.venv',
+    '__pycache__'
+]
+line-length = 88
+
+[lint]
+select = ['E', 'F', 'W']
+
+[lint.pycodestyle]
+max-line-length = 110
