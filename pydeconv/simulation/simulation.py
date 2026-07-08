@@ -32,6 +32,7 @@ assign_event_latencies
 import inspect
 from typing import Any, Callable, Sequence
 
+import mne
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -525,6 +526,10 @@ class EEGSimulator:
 
         plt.show()
 
+    def export_evoked_array(self):
+        n_channels = self.data.shape[0]
+        info = mne.create_info(ch_names=n_channels, sfreq=self.sfreq, ch_types=["eeg"] * n_channels)
+        return mne.EvokedArray(self.data, info, verbose=False)
 
 # ---------------------------------------------------------------------------
 # TrialVariable & TrialStructure
