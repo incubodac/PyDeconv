@@ -37,48 +37,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.signal import fftconvolve, windows
 
-# ---------------------------------------------------------------------------
-# Type aliases
-# ---------------------------------------------------------------------------
-
-ISISampler = Callable[[pd.Series], int]
-"""Callable that receives an event row and returns an inter-stimulus interval
-(in samples)."""
-
-# ---------------------------------------------------------------------------
-# ISI helpers
-# ---------------------------------------------------------------------------
-
-
-def build_uniform_isi_sampler(
-    width: int,
-    offset: int = 0,
-    *,
-    rng: np.random.Generator | None = None,
-) -> ISISampler:
-    """Build an ISI sampler that draws uniformly from ``[offset, offset+width]``.
-
-    Parameters
-    ----------
-    width : int
-        Range of the uniform distribution (in samples).
-    offset : int
-        Minimum ISI value (in samples).
-    rng : numpy.random.Generator or None
-        Random number generator. If None, a new default generator is created.
-
-    Returns
-    -------
-    sampler : ISISampler
-        A callable ``(row) -> int``.
-    """
-    rng = rng or np.random.default_rng()
-
-    def _sample(_row: pd.Series) -> int:
-        return int(rng.integers(offset, offset + width + 1))
-
-    return _sample
-
+from .isi_sampler import ISISampler, build_uniform_isi_sampler
 
 def assign_event_latencies(
     events: pd.DataFrame,
@@ -709,8 +668,8 @@ class ExperimentDesign:
     duration_s : float
         Maximum signal duration in seconds.  Events whose cumulative latency
         exceeds ``duration_s`` are dropped.
-    isi_range : tuple of int
-        ``(offset, width)`` passed to ``build_uniform_isi_sampler``.
+    isi_sampler : ISISampler
+        sampler function to generate ISI intervals between events.
     variables : list of TrialVariable or None
         Additional covariates.
     seed : int or None
@@ -723,7 +682,7 @@ class ExperimentDesign:
         n_events: int,
         sfreq: float,
         duration_s: float,
-        isi_range: tuple[int, int] = (50, 200),
+        isi_sampler: ISISampler | None = None,
         variables: list[TrialVariable] | None = None,
         seed: int | None = None,
     ):
@@ -731,7 +690,6 @@ class ExperimentDesign:
         self.n_events = n_events
         self.sfreq = sfreq
         self.duration_s = duration_s
-        self.isi_range = isi_range
         self.seed = seed
 
         rng = np.random.default_rng(seed)
@@ -749,8 +707,8 @@ class ExperimentDesign:
             sfreq=sfreq, variables=all_vars, seed=seed,
         )
         self._sampler = build_uniform_isi_sampler(
-            width=isi_range[1], offset=isi_range[0], rng=rng,
-        )
+            width=200, offset=50, rng=rng,
+        ) if not isi_sampler else isi_sampler
 
     def generate_events(self) -> pd.DataFrame:
         """Generate the full events DataFrame.

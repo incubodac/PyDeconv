@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import numpy as np
 from pydeconv.core import DeconvolutionModel
-from pydeconv.simulation import (
+from pydeconv.simulation.simulation import (
     ExperimentDesign,
     EEGSimulator,
     CompoundKernel,
