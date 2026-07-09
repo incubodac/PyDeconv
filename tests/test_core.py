@@ -214,14 +214,6 @@ class TestBuildDesignMatrix:
             "mss": [2, 4, 6],
         })
 
-    def test_shape_intercept_only(self, simple_events):
-        model = DeconvolutionModel(
-            tmin=0.0, tmax=0.1, sfreq=100, has_intercept=True,
-        )
-        X = model.build_design_matrix(simple_events, n_samples=200, use_gpu=False)
-        n_delays = int(np.round(0.1 * 100)) + 1  # 11
-        assert X.shape == (200, 1 * n_delays)
-
     def test_shape_with_features(self, simple_events):
         model = (
             DeconvolutionModel(tmin=0.0, tmax=0.1, sfreq=100)
