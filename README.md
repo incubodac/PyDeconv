@@ -88,6 +88,3 @@ python -m pydeconv.gui
 ## Documentation
 
 Find detailed tutorials and examples in the [documentation](#).
-}
-
-```
