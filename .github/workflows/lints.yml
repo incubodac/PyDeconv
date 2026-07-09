@@ -1,0 +1,21 @@
+name: Lints Check
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Install python libs
+        run: pip install numpy scipy matplotlib pandas scikit-learn
+
+      - name: Run make check
+        run: make check
