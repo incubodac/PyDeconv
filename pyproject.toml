@@ -23,3 +23,6 @@ gui = [ "PySide6" ]
 [project.urls]
 Repository = "https://github.com/incubodac/PyDeconv"
 Issues = "https://github.com/incubodac/PyDeconv/issues"
+
+[dependency-groups]
+test = ["pytest >= 9.0"]

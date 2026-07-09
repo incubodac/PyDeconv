@@ -77,6 +77,8 @@ python -m pydeconv.gui
 ## Dependencies
 
 - [Python](https://www.python.org) ≥ 3.9
+- [pip](https://pypi.org/project/pip/) ≥ 25.1
+- [pytest](https://pypi.org/project/pytest/) ≥ 9.0
 - [MNE](https://mne.tools/stable/index.html) ≥ 1.3.1
 - [NumPy](https://numpy.org) ≥ 1.24.2
 - [SciPy](https://scipy.org) ≥ 1.10.1

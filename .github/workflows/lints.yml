@@ -15,7 +15,7 @@ jobs:
         run: pip install ruff
 
       - name: Install python libs
-        run: pip install numpy scipy matplotlib pandas scikit-learn
+        run: make install
 
       - name: Run make check
         run: make check
