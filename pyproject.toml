@@ -1,0 +1,25 @@
+[project]
+name = "pydeconv"
+description = "open-source Python package for EEG/MEG **deconvolution analysis** — the technique of separating overlapping event-related brain responses from continuous neural recordings"
+version = "0.0.1"
+
+readme = "README.md"
+license-files = ["LICENSE"]
+
+requires-python = ">= 3.9"
+
+dependencies = [
+    "mne >= 1.3.1",
+    "numpy >= 1.24.2",
+    "scipy >= 1.10.1",
+    "matplotlib >= 3.6",
+    "pandas >= 2.1.0",
+    "scikit-learn >= 1.2.2",
+]
+
+[project.optional-dependencies]
+gui = [ "PySide6" ]
+
+[project.urls]
+Repository = "https://github.com/incubodac/PyDeconv"
+Issues = "https://github.com/incubodac/PyDeconv/issues"

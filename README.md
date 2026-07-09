@@ -64,13 +64,13 @@ See [`examples/`](examples/) for complete runnable scripts.
 ## Installation
 
 ```bash
-pip install -e .          # editable install from the repo root
+make install
 ```
 
 For the GUI, also install PySide6:
 
 ```bash
-pip install PySide6
+make gui-install
 python -m pydeconv.gui
 ```
 

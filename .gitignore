@@ -3,6 +3,13 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Distribution / packaging
+*.egg-info/
+*.egg
+.eggs/
+eggs/
+develop-eggs/
+
 # macOS system files
 .DS_Store
 
