@@ -152,9 +152,8 @@ class TestDeconvolutionModelInit:
 
     def test_defaults(self):
         model = DeconvolutionModel()
-        assert model.has_intercept is True
-        assert model.additive_features == []
-        assert model.interactions == []
+        assert model.additive_features == {}
+        assert model.interactions == {}
         assert model.is_fitted is False
         assert model.coef_ is None
         assert "Ridge" in type(model.estimator).__name__

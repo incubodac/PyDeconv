@@ -271,7 +271,6 @@ class DeconvolutionModel(BaseEstimator):
         tmin: float = -0.2,
         tmax: float = 0.6,
         sfreq: float = 256.0,
-        has_intercept: bool | None = None,
         event_column: str = "type",
         additive_features: list[Feature] | dict[str, list[Feature]] | None = None,
         interactions: list[tuple[str, str]] | dict[str, list[tuple[str, str]]] | None = None,
@@ -285,9 +284,6 @@ class DeconvolutionModel(BaseEstimator):
         self.tmin = tmin
         self.tmax = tmax
         self.sfreq = sfreq
-        # Backward compatibility: the global intercept switch is deprecated.
-        # Intercepts are now controlled per event via add_feature shorthand.
-        _ = has_intercept
         self.event_column = event_column
 
         if additive_features is None:
