@@ -164,9 +164,11 @@ class TestDeconvolutionModelInit:
             .add_feature("contrast", "contrast_col")
             .add_feature("log_rt", "rt", transform=np.log)
         )
-        assert len(model.additive_features) == 2
-        assert model.additive_features[0].name == "contrast"
-        assert model.additive_features[1].transform is np.log
+
+        assert "__global__" in model.additive_features
+        assert len(model.additive_features["__global__"]) == 2
+        assert model.additive_features["__global__"][0].name == "contrast"
+        assert model.additive_features["__global__"][1].transform is np.log
 
     def test_add_interaction(self):
         model = (
@@ -175,7 +177,8 @@ class TestDeconvolutionModelInit:
             .add_feature("b", "col_b")
             .add_interaction("a", "b")
         )
-        assert model.interactions == [("a", "b")]
+        assert "__global__" in model.interactions
+        assert model.interactions["__global__"] == [("a", "b")]
 
     def test_repr_unfitted(self):
         model = DeconvolutionModel(tmin=-0.1, tmax=0.5, sfreq=500)
@@ -222,8 +225,8 @@ class TestBuildDesignMatrix:
         )
         X = model.build_design_matrix(simple_events, n_samples=200, use_gpu=False)
         n_delays = 11
-        # intercept + contrast + mss = 3 columns
-        assert X.shape == (200, 3 * n_delays)
+        #contrast + mss = 2 columns (no intercept)
+        assert X.shape == (200, 2 * n_delays)
 
     def test_shape_with_interaction(self, simple_events):
         model = (
@@ -234,8 +237,8 @@ class TestBuildDesignMatrix:
         )
         X = model.build_design_matrix(simple_events, n_samples=200, use_gpu=False)
         n_delays = 11
-        # intercept + contrast + mss + contrast:mss = 4
-        assert X.shape == (200, 4 * n_delays)
+        # contrast + mss + contrast:mss = 3 columns (no intercept)
+        assert X.shape == (200, 3 * n_delays)
 
     def test_feature_names_populated(self, simple_events):
         model = (
@@ -243,12 +246,46 @@ class TestBuildDesignMatrix:
             .add_feature("contrast", "contrast")
         )
         model.build_design_matrix(simple_events, n_samples=200, use_gpu=False)
-        assert model.feature_names_ == ["intercept", "contrast"]
+        assert model.feature_names_ == ["contrast"]
+
+    def test_shape_with_features_with_intercept(self, simple_events):
+        model = (
+            DeconvolutionModel(tmin=0.0, tmax=0.1, sfreq=100)
+            .add_feature("stim", from_event="stim")
+            .add_feature("contrast", "contrast")
+            .add_feature("mss", "mss")
+        )
+        X = model.build_design_matrix(simple_events, n_samples=200, use_gpu=False)
+        n_delays = 11
+        # stim:intercept + contrast + mss = 3 columns
+        assert X.shape == (200, 3 * n_delays)
+
+    def test_shape_with_interaction_with_intercept(self, simple_events):
+        model = (
+            DeconvolutionModel(tmin=0.0, tmax=0.1, sfreq=100)
+            .add_feature("stim", from_event="stim")
+            .add_feature("contrast", "contrast")
+            .add_feature("mss", "mss")
+            .add_interaction("contrast", "mss")
+        )
+        X = model.build_design_matrix(simple_events, n_samples=200, use_gpu=False)
+        n_delays = 11
+        # stim:intercept + contrast + mss + contrast:mss = 4 columns
+        assert X.shape == (200, 4 * n_delays)
+
+    def test_feature_names_populated_with_intercept(self, simple_events):
+        model = (
+            DeconvolutionModel(tmin=0.0, tmax=0.1, sfreq=100)
+            .add_feature("stim", from_event="stim")
+            .add_feature("contrast", "contrast")
+        )
+        model.build_design_matrix(simple_events, n_samples=200, use_gpu=False)
+        assert model.feature_names_ == ["contrast", "stim:intercept"]
 
     def test_transform_applied(self, simple_events):
         model = (
             DeconvolutionModel(
-                tmin=0.0, tmax=0.0, sfreq=100, has_intercept=False
+                tmin=0.0, tmax=0.0, sfreq=100,
             )
             .add_feature("sq_contrast", "contrast", transform=lambda x: x ** 2)
         )
@@ -275,7 +312,6 @@ class TestBuildDesignMatrix:
         model = (
             DeconvolutionModel(
                 tmin=0.0, tmax=0.0, sfreq=100,
-                has_intercept=False,
                 spline_config={"contrast": 5},
             )
             .add_feature("contrast", "contrast")
