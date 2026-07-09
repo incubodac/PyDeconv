@@ -290,17 +290,21 @@ class DeconvolutionModel(BaseEstimator):
         _ = has_intercept
         self.event_column = event_column
 
-        if isinstance(additive_features, dict):
+        if additive_features is None:
+            self.additive_features = {}
+        elif isinstance(additive_features, dict):
             self.additive_features = {k: list(v) for k, v in additive_features.items()}
         else:
             features_list = list(additive_features)
-            self.additive_features = {"__global__": features_list} if additive_features else {}
+            self.additive_features = {"__global__": features_list} if features_list else {}
 
-        if isinstance(interactions, dict):
+        if interactions is None:
+            self.interactions = {}
+        elif isinstance(interactions, dict):
             self.interactions = {k: list(v) for k, v in interactions.items()}
         else:
             interactions_list = list(interactions)
-            self.interactions = {"__global__": interactions_list} if interactions else {}
+            self.interactions = {"__global__": interactions_list} if interactions_list else {}
 
         self.spline_config = spline_config
         self.estimator = estimator if estimator is not None else Ridge()
