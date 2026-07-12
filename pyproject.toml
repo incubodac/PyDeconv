@@ -26,3 +26,4 @@ Issues = "https://github.com/incubodac/PyDeconv/issues"
 
 [dependency-groups]
 test = ["pytest >= 9.0"]
+profiling = [ "memray >= 1.19" ]

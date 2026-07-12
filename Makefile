@@ -15,3 +15,6 @@ gui-install:
 
 test-install:
 	pip install --group test
+
+profiling-install:
+	pip install --group profiling
