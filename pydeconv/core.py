@@ -318,6 +318,7 @@ class DeconvolutionModel(BaseEstimator):
         self._feature_mean_: np.ndarray | None = None
         self._feature_std_: np.ndarray | None = None
         self.event_intercepts: set[str] = set()
+        self._spline_features: dict[str, list[tuple[str, str, SplineConfig, bool]]] = {}
         self._last_event_scope: str | None = None
 
     # ----- builder helpers -----
@@ -392,6 +393,71 @@ class DeconvolutionModel(BaseEstimator):
         if key not in self.additive_features:
             self.additive_features[key] = []
         self.additive_features[key].append(Feature(name, column, transform))
+        return self
+
+    def add_feature_splines(
+        self,
+        name: str,
+        column: str | None = None,
+        from_event: str | None = None,
+        n_splines: int = 5,
+        knot_method: str = "quantile",
+        degree: int = 3,
+        intercept: bool = True,
+    ) -> "DeconvolutionModel":
+        """Register a B-spline expansion of a continuous covariate.
+
+        This method expands a single numeric column into ``n_splines``
+        basis functions, producing design-matrix columns named
+        ``"{name}_sp_0"``, ``"{name}_sp_1"``, etc.
+
+        Parameters
+        ----------
+        name : str
+            Label prefix for the spline basis columns.
+        column : str or None
+            Column in the events DataFrame to read values from.
+            Defaults to *name* when ``None``.
+        from_event : str or None
+            Restrict this spline feature to rows whose event column
+            matches *from_event*.
+        n_splines : int
+            Number of B-spline basis functions.
+        knot_method : str
+            ``'quantile'`` (default) or ``'equidistant'`` / ``'uniform'``.
+        degree : int
+            Polynomial degree of the B-spline (default 3 = cubic).
+        intercept : bool
+            If ``False``, the first (constant-like) basis function is
+            dropped to avoid collinearity with an event intercept.
+
+        Returns
+        -------
+        self : DeconvolutionModel
+            For method chaining.
+
+        """
+        if column is None:
+            column = name
+
+        # Normalise alias
+        if knot_method == "equidistant":
+            knot_method = "uniform"
+
+        cfg = SplineConfig(
+            n_splines=n_splines,
+            knot_method=knot_method,
+            degree=degree,
+        )
+
+        event_type = from_event
+        if event_type is not None:
+            self._last_event_scope = event_type
+
+        key = event_type if event_type is not None else "__global__"
+        if key not in self._spline_features:
+            self._spline_features[key] = []
+        self._spline_features[key].append((name, column, cfg, intercept))
         return self
 
     def add_interaction(
@@ -548,6 +614,7 @@ class DeconvolutionModel(BaseEstimator):
             set(self.additive_features.keys())
             | set(self.interactions.keys())
             | set(self.event_intercepts)
+            | set(self._spline_features.keys())
         )
 
         for ev_type in sorted(all_event_types):
@@ -599,6 +666,24 @@ class DeconvolutionModel(BaseEstimator):
                     col[mask] = vals
                     columns.append(col)
                     names.append(f"{prefix}{feat.name}")
+                    column_event_types.append(ev_type)
+
+            # --- Spline Features (from add_feature_splines) ---
+            spline_feats = self._spline_features.get(ev_type, [])
+            for sp_name, sp_col, sp_cfg, sp_intercept in spline_feats:
+                if sp_col not in sub_events.columns:
+                    raise ValueError(
+                        f"Spline feature '{sp_name}' references column "
+                        f"'{sp_col}' not found in events DataFrame."
+                    )
+                sp_vals = sub_events[sp_col].values.astype(float)
+                basis = _bspline_basis(sp_vals, sp_cfg)
+                start_idx = 0 if sp_intercept else 1
+                for i in range(start_idx, basis.shape[1]):
+                    col = np.zeros(n_events)
+                    col[mask] = basis[:, i]
+                    columns.append(col)
+                    names.append(f"{prefix}{sp_name}_sp_{i}")
                     column_event_types.append(ev_type)
 
             # --- Interactions ---

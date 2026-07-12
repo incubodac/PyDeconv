@@ -1,8 +1,14 @@
+from __future__ import annotations
 # Design matrix creation and B-spline feature expansion utilities
 import numpy as np
-# pyrefly: ignore [missing-import]
-import torch
 from typing import Sequence, Optional
+
+try:
+    import torch
+    _HAS_TORCH = True
+except ImportError:
+    torch = None  # type: ignore[assignment]
+    _HAS_TORCH = False
 
 def shifted_matrix(
     features: np.ndarray,
@@ -44,6 +50,34 @@ def shifted_matrix(
         Design matrix where each row contains concatenated features for each delay.
 
     """
+    # ── Pure-numpy fallback when torch is unavailable ──────────────────
+    if not _HAS_TORCH:
+        feats = features.reshape(-1, 1) if features.ndim == 1 else features
+        n_samples, n_feat = feats.shape
+        delays_arr = np.asarray(delays, dtype=int)
+        n_delays = len(delays_arr)
+
+        if indices_to_keep is not None:
+            row_idx = np.asarray(indices_to_keep, dtype=int)
+        else:
+            row_idx = np.arange(n_samples)
+
+        n_rows = len(row_idx)
+        # Build shifted tensor: (n_rows, n_delays, n_feat)
+        shifted = np.zeros((n_rows, n_delays, n_feat), dtype=np.float64)
+        for di, d in enumerate(delays_arr):
+            src = row_idx - d
+            valid = (src >= 0) & (src < n_samples)
+            shifted[valid, di, :] = feats[src[valid]]
+
+        # Reshape: (n_rows, n_feat * n_delays)
+        mat = shifted.transpose(0, 2, 1).reshape(n_rows, n_feat * n_delays)
+
+        if train_indexes is not None and pred_indexes is not None:
+            return mat[train_indexes, :], mat[pred_indexes, :]
+        return mat
+
+    # ── Torch-accelerated path ───────────────────────────────────────
     # Determine device order: try GPU first, then CPU
     preferred = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
     devices = [preferred]

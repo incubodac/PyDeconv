@@ -19,6 +19,12 @@ def __getattr__(name: str):
     _design_matrix = {
         "create_design_matrix",
     }
+    _plotting = {
+        "plot_trfs_butterfly",
+        "plot_design_matrix",
+        "plot_trfs",
+        "plot_simulation_kernels",
+    }
 
     if name in _window_rejection:
         from . import window_rejection
@@ -31,6 +37,10 @@ def __getattr__(name: str):
     if name in _design_matrix:
         from . import design_matrix
         return getattr(design_matrix, name)
+
+    if name in _plotting:
+        from . import plotting
+        return getattr(plotting, name)
 
     raise AttributeError(
         f"module {__name__!r} has no attribute {name!r}"
@@ -47,4 +57,9 @@ __all__ = [
     'get_channel_adjacency',
     # Design matrix
     'create_design_matrix',
+    # Plotting
+    'plot_trfs_butterfly',
+    'plot_design_matrix',
+    'plot_trfs',
+    'plot_simulation_kernels',
 ]

@@ -138,6 +138,208 @@ def plot_simulation_kernels(simulator, figsize=None):
     return fig
 
 
+# ---------------------------------------------------------------------------
+# Feature grouping helper
+# ---------------------------------------------------------------------------
+
+
+def _group_features(feature_names):
+    """Group feature names, collapsing B-spline bases into one entry.
+
+    Spline columns named ``"prefix_sp_0"``, ``"prefix_sp_1"``, … are
+    merged under the key ``"prefix"``.
+
+    Parameters
+    ----------
+    feature_names : list of str
+        The ``model.feature_names_`` list.
+
+    Returns
+    -------
+    groups : dict[str, list[str]]
+        Ordered mapping from group name to the list of feature names
+        belonging to that group.
+
+    """
+    groups: dict[str, list[str]] = {}
+    for name in feature_names:
+        base = name
+        if "_sp_" in name:
+            base = name.rsplit("_sp_", 1)[0]
+        groups.setdefault(base, []).append(name)
+    return groups
+
+
+def _feature_delay_mask(model, group_name):
+    """Return a boolean mask over delays for an event-scoped group."""
+    n_delays = len(model.delays_)
+    times = model.times_
+    event_type = group_name.split(":")[0] if ":" in group_name else None
+    if event_type and hasattr(model, "analysis_windows"):
+        win = model.analysis_windows.get(event_type)
+        if win is not None:
+            mask = (times >= win[0]) & (times <= win[1])
+            if np.any(mask):
+                return mask
+    return np.ones(n_delays, dtype=bool)
+
+
+# ---------------------------------------------------------------------------
+# Lightweight TRF plot (no MNE dependency)
+# ---------------------------------------------------------------------------
+
+
+def plot_trfs_butterfly(model, features=None, figsize=None):
+    """Plot TRFs as mean ± SEM across channels (pure matplotlib).
+
+    Spline bases belonging to the same feature are grouped on one
+    subplot so their individual contributions are easy to compare.
+
+    Parameters
+    ----------
+    model : pydeconv.core.DeconvolutionModel
+        A fitted model with ``coef_`` available.
+    features : list of str, optional
+        Group names (or individual feature names) to include.
+        If ``None``, all features are plotted.
+    figsize : tuple, optional
+        Figure size. Defaults to ``(5 * n_groups, 4)``.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    """
+    if getattr(model, "coef_", None) is None:
+        raise ValueError("Model is not fitted. Cannot plot TRFs.")
+
+    coef = model.coef_
+    if coef.ndim == 1:
+        coef = coef.reshape(1, -1)
+
+    n_delays = len(model.delays_)
+    times = model.times_
+
+    groups = _group_features(model.feature_names_)
+
+    if features is not None:
+        groups = {k: v for k, v in groups.items() if k in features}
+
+    if not groups:
+        raise ValueError("No matching feature groups found to plot.")
+
+    n_groups = len(groups)
+    if figsize is None:
+        figsize = (5 * n_groups, 4)
+
+    fig, axes = plt.subplots(1, n_groups, figsize=figsize, squeeze=False)
+
+    for ax_idx, (group_name, feat_names) in enumerate(groups.items()):
+        ax = axes[0, ax_idx]
+        delay_mask = _feature_delay_mask(model, group_name)
+        t_plot = times[delay_mask]
+
+        for feat_name in feat_names:
+            feat_idx = model.feature_names_.index(feat_name)
+            start = feat_idx * n_delays
+            end = start + n_delays
+            trf = coef[:, start:end][:, delay_mask]
+
+            mean_trf = trf.mean(axis=0)
+            sem_trf = trf.std(axis=0) / np.sqrt(trf.shape[0])
+
+            label = feat_name.split(":")[-1] if ":" in feat_name else feat_name
+            ax.plot(t_plot, mean_trf, lw=1.5, label=label)
+            ax.fill_between(
+                t_plot, mean_trf - sem_trf, mean_trf + sem_trf, alpha=0.2,
+            )
+
+        ax.axhline(0, color="k", lw=0.5, ls="--")
+        ax.axvline(0, color="k", lw=0.5, ls=":")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Coefficient (a.u.)")
+        title = group_name.replace(":", " → ")
+        ax.set_title(title, fontweight="bold")
+        if len(feat_names) > 1:
+            ax.legend(fontsize=7, loc="best")
+
+    fig.suptitle(
+        "Temporal Response Functions (mean ± SEM across channels)",
+        fontweight="bold", y=1.02,
+    )
+    plt.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Design matrix heatmap
+# ---------------------------------------------------------------------------
+
+
+def plot_design_matrix(
+    model,
+    X,
+    sfreq=None,
+    snippet_start=0,
+    snippet_duration_s=5.0,
+    figsize=(12, 4),
+):
+    """Plot a heatmap of the design matrix at delay = 0.
+
+    Shows one column per feature (at the zero-delay slice) over a short
+    time window for visual inspection.
+
+    Parameters
+    ----------
+    model : pydeconv.core.DeconvolutionModel
+        A model whose ``feature_names_`` and ``delays_`` are populated
+        (i.e. ``build_design_matrix`` has been called).
+    X : numpy.ndarray, shape ``(n_samples, n_features * n_delays)``
+        The full design matrix.
+    sfreq : float, optional
+        Sampling frequency for the time axis. Defaults to ``model.sfreq``.
+    snippet_start : int
+        First sample index to display.
+    snippet_duration_s : float
+        Duration of the snippet to display, in seconds.
+    figsize : tuple
+        Figure size.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    """
+    if sfreq is None:
+        sfreq = model.sfreq
+
+    n_delays = len(model.delays_)
+    snippet_end = min(
+        snippet_start + int(snippet_duration_s * sfreq), X.shape[0],
+    )
+
+    zero_delay_idx = int(np.argmin(np.abs(model.delays_)))
+    col_indices = [
+        i * n_delays + zero_delay_idx for i in range(len(model.feature_names_))
+    ]
+    X_plot = X[snippet_start:snippet_end, :][:, col_indices]
+
+    t_snippet = np.arange(snippet_start, snippet_end) / sfreq
+
+    fig, ax = plt.subplots(figsize=figsize)
+    im = ax.pcolormesh(
+        t_snippet, np.arange(X_plot.shape[1]),
+        X_plot.T, cmap="RdBu_r", shading="auto",
+    )
+    ax.set_yticks(np.arange(len(model.feature_names_)))
+    ax.set_yticklabels(model.feature_names_, fontsize=7)
+    ax.set_xlabel("Time (s)")
+    ax.set_title("Design Matrix (delay = 0 slice)", fontweight="bold")
+    plt.colorbar(im, ax=ax, label="Value")
+    plt.tight_layout()
+    return fig
+
+
 def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
     """Plot the fitted Temporal Response Functions (TRFs) using MNE.
 
