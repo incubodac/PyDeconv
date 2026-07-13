@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pydeconv.core import DeconvolutionModel
 
 # ── Paths ────────────────────────────────────────────────────────────
-DATA_DIR = Path(__file__).resolve().parent.parent / "old" / "example_data"
+DATA_DIR = Path(__file__).resolve().parent.parent / "example" / "example_data"
 SET_FILE = DATA_DIR / "629959_analysis.set"
 EVENTS_CSV = DATA_DIR / "629959_full_metadata.csv"
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
