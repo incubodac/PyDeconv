@@ -144,10 +144,15 @@ def plot_simulation_kernels(simulator, figsize=None):
 
 
 def _group_features(feature_names):
-    """Group feature names, collapsing B-spline bases into one entry.
+    """Group feature names, collapsing B-spline bases and their intercepts.
 
     Spline columns named ``"prefix_sp_0"``, ``"prefix_sp_1"``, … are
     merged under the key ``"prefix"``.
+
+    When a spline group belongs to an event (e.g. ``saccade:sac_amp``),
+    the corresponding event intercept (``saccade:intercept``) is
+    automatically absorbed into that group so the plotted TRF shows the
+    total response (intercept + spline modulation).
 
     Parameters
     ----------
@@ -158,7 +163,8 @@ def _group_features(feature_names):
     -------
     groups : dict[str, list[str]]
         Ordered mapping from group name to the list of feature names
-        belonging to that group.
+        belonging to that group.  Intercepts that have been absorbed
+        into a spline group are **not** listed as standalone groups.
 
     """
     groups: dict[str, list[str]] = {}
@@ -167,6 +173,31 @@ def _group_features(feature_names):
         if "_sp_" in name:
             base = name.rsplit("_sp_", 1)[0]
         groups.setdefault(base, []).append(name)
+
+    # Absorb event intercepts into their spline groups.
+    # For each spline group (has _sp_ members), find its event prefix
+    # and check if "prefix:intercept" exists as a standalone group.
+    absorbed_intercepts: set[str] = set()
+    spline_groups = [
+        gname for gname, members in groups.items()
+        if any("_sp_" in m for m in members)
+    ]
+    for gname in spline_groups:
+        if ":" in gname:
+            prefix = gname.split(":")[0]
+            intercept_key = f"{prefix}:intercept"
+        else:
+            intercept_key = "intercept"
+
+        if intercept_key in groups and intercept_key not in absorbed_intercepts:
+            # Add the intercept feature name(s) into the spline group
+            groups[gname] = groups[intercept_key] + groups[gname]
+            absorbed_intercepts.add(intercept_key)
+
+    # Remove absorbed intercept groups so they are not plotted standalone
+    for key in absorbed_intercepts:
+        del groups[key]
+
     return groups
 
 
@@ -246,30 +277,15 @@ def plot_trfs_butterfly(model, features=None, figsize=None, baseline=None):
         delay_mask = _feature_delay_mask(model, group_name)
         t_plot = times[delay_mask]
 
-        # Check if this group is a spline group
-        is_spline = any("_sp_" in name for name in feat_names)
-
-        # Sum up the coefficients for all spline bases/features in the group
+        # Sum up coefficients for all features in the group.
+        # _group_features already absorbs the event intercept into spline
+        # groups, so a simple sum over all members gives the total TRF.
         trf_group = np.zeros((coef.shape[0], n_delays))
         for feat_name in feat_names:
             feat_idx = model.feature_names_.index(feat_name)
             start = feat_idx * n_delays
             end = start + n_delays
             trf_group += coef[:, start:end]
-
-        # If it is a spline feature, add the corresponding event intercept if present
-        if is_spline:
-            if ":" in group_name:
-                prefix = group_name.split(":")[0]
-                intercept_name = f"{prefix}:intercept"
-            else:
-                intercept_name = "intercept"
-
-            if intercept_name in model.feature_names_:
-                intercept_idx = model.feature_names_.index(intercept_name)
-                start_int = intercept_idx * n_delays
-                end_int = start_int + n_delays
-                trf_group += coef[:, start_int:end_int]
 
         # Apply delay mask
         trf = trf_group[:, delay_mask].copy()
@@ -382,8 +398,12 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8), 
     """Plot the fitted Temporal Response Functions (TRFs) using MNE.
 
     This uses a horizontal layout inspired by the legacy PyDeconv plots,
-    where each feature gets its own column consisting of a butterfly plot
-    and (optionally) topomaps at peak times.
+    where each feature-group gets its own column consisting of a butterfly
+    plot and (optionally) topomaps at peak times.
+
+    Spline bases belonging to the same feature are summed into a single
+    TRF, and the corresponding event intercept is automatically added
+    so the plot shows the total response.
 
     Parameters
     ----------
@@ -393,8 +413,9 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8), 
         The MNE Info object corresponding to the channels used to fit the model.
         If None, a dummy Info object is created automatically.
     features : list of str, optional
-        A list of feature names to plot. If None, plots all features
-        (except the intercept, if present).
+        A list of group names to plot.  If ``None``, all groups
+        (except standalone intercepts already absorbed into spline
+        groups) are plotted.
     top_topos : bool, default True
         If True, plots joint time-series and topomaps (mne.Evoked.plot_joint).
         If False, only plots the butterfly time-series.
@@ -417,65 +438,58 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8), 
     if getattr(model, "coef_", None) is None:
         raise ValueError("Model is not fitted. Cannot plot TRFs.")
 
-    if features is None:
-        features = [f for f in model.feature_names_ if f != "intercept"]
-
     n_delays = len(model.delays_)
     times = getattr(model, "times_", np.arange(n_delays))
-
-    def _feature_delay_mask(feat_name: str) -> np.ndarray:
-        """Return per-feature delay mask from model.analysis_windows."""
-        if not hasattr(model, "analysis_windows") or ":" not in feat_name:
-            return np.ones(n_delays, dtype=bool)
-
-        event_type = feat_name.split(":", 1)[0]
-        win = model.analysis_windows.get(event_type)
-        if win is None:
-            return np.ones(n_delays, dtype=bool)
-
-        delay_min = int(np.round(win[0] * model.sfreq))
-        delay_max = int(np.round(win[1] * model.sfreq))
-        mask = (model.delays_ >= delay_min) & (model.delays_ <= delay_max)
-        if not np.any(mask):
-            return np.ones(n_delays, dtype=bool)
-        return mask
 
     coef = model.coef_
     if coef.ndim == 1:
         coef = coef[np.newaxis, :]
 
+    # Use feature grouping (splines collapsed, intercepts absorbed)
+    groups = _group_features(model.feature_names_)
+
+    if features is not None:
+        groups = {k: v for k, v in groups.items() if k in features}
+    else:
+        # Exclude any remaining standalone "intercept" (global)
+        groups = {k: v for k, v in groups.items() if k != "intercept"}
+
+    if not groups:
+        raise ValueError("No matching feature groups found to plot.")
+
     if info is None:
         n_channels = coef.shape[0]
         ch_names = [f"ch_{i}" for i in range(n_channels)]
-        info = mne.create_info(ch_names=ch_names, sfreq=model.sfreq, ch_types=["eeg"] * n_channels)
-        top_topos = False  # Dummy info has no sensor coordinates for topomaps
+        info = mne.create_info(
+            ch_names=ch_names, sfreq=model.sfreq,
+            ch_types=["eeg"] * n_channels,
+        )
+        top_topos = False  # Dummy info has no sensor coordinates
 
+    n_groups = len(groups)
     fig = plt.figure(figsize=figsize)
 
-    # Layout constants from legacy code
-    _top_slide = 0.02
-    horizontal_jump = 0.8 / len(features)  # dynamically space out based on n features
+    horizontal_jump = 0.8 / n_groups
 
-    for jump, feat_name in enumerate(features):
-        try:
-            n_coeff = model.feature_names_.index(feat_name)
-        except ValueError:
-            print(f"Warning: Feature '{feat_name}' not found in model. Skipping.")
-            continue
+    for jump, (group_name, feat_names) in enumerate(groups.items()):
+        delay_mask = _feature_delay_mask(model, group_name)
 
-        # Extract data for this TRF: shape (n_channels, n_delays)
-        start_idx = n_coeff * n_delays
-        end_idx = (n_coeff + 1) * n_delays
-        data_full = coef[:, start_idx:end_idx]
+        # Sum coefficients for every member of the group
+        trf_group = np.zeros((coef.shape[0], n_delays))
+        for feat_name in feat_names:
+            feat_idx = model.feature_names_.index(feat_name)
+            start = feat_idx * n_delays
+            end = start + n_delays
+            trf_group += coef[:, start:end]
 
-        # Event-specific features can have narrower analysis windows.
-        keep_mask = _feature_delay_mask(feat_name)
-        data = data_full[:, keep_mask].copy()
-        times_feat = times[keep_mask]
+        data = trf_group[:, delay_mask].copy()
+        times_feat = times[delay_mask]
         x_lims = (times_feat[0], times_feat[-1])
 
         # Create an Evoked object
-        grand_avg = mne.EvokedArray(data, info, tmin=times_feat[0], verbose=False)
+        grand_avg = mne.EvokedArray(
+            data, info, tmin=times_feat[0], verbose=False,
+        )
         grand_avg.nave = None
         if baseline is not None:
             grand_avg.apply_baseline(baseline, verbose=False)
@@ -492,23 +506,31 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8), 
         ax_frp = fig.add_axes((x0, 0.47, width, 0.2))
 
         if top_topos:
-            # We place 3 topomaps directly above the line plot
             topo_w = width * 0.25
             gap = width * 0.05
             ax_topo1 = fig.add_axes((x0, 0.75, topo_w, 0.15))
             ax_topo2 = fig.add_axes((x0 + topo_w + gap, 0.75, topo_w, 0.15))
-            ax_topo3 = fig.add_axes((x0 + 2*(topo_w + gap), 0.75, topo_w, 0.15))
-            ax_topo_cb = fig.add_axes((x0 + 3*(topo_w + gap), 0.75, width * 0.02, 0.15))
+            ax_topo3 = fig.add_axes(
+                (x0 + 2 * (topo_w + gap), 0.75, topo_w, 0.15),
+            )
+            ax_topo_cb = fig.add_axes(
+                (x0 + 3 * (topo_w + gap), 0.75, width * 0.02, 0.15),
+            )
             axs_topos = [ax_topo1, ax_topo2, ax_topo3, ax_topo_cb]
 
             grand_avg.plot_joint(
                 title="",
-                ts_args={'xlim': x_lims, 'axes': ax_frp, 'titles': dict(eeg=''), 'window_title': ''},
-                topomap_args={'vlim': vlim, 'contours': 2, 'axes': axs_topos, 'size': 0.8},
-                show=False
+                ts_args={
+                    'xlim': x_lims, 'axes': ax_frp,
+                    'titles': dict(eeg=''), 'window_title': '',
+                },
+                topomap_args={
+                    'vlim': vlim, 'contours': 2,
+                    'axes': axs_topos, 'size': 0.8,
+                },
+                show=False,
             )
 
-            # Format topomap colorbar
             ax_cb = axs_topos[-1]
             ax_cb.set_title(r'$\mu V$', fontsize=10)
             for top in axs_topos:
@@ -520,17 +542,17 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8), 
                 titles=dict(eeg=''),
                 window_title='',
                 xlim=x_lims,
-                show=False
+                show=False,
             )
 
         # Clean up axes
         ax_frp.set_xlabel("Time (s)")
-        ax_frp.set_title(f"{feat_name}", fontweight="bold", pad=15)
+        title = group_name.replace(":", " → ")
+        ax_frp.set_title(title, fontweight="bold", pad=15)
         if jump > 0:
             ax_frp.set_ylabel("")
             ax_frp.set_yticklabels([])
 
-        # Remove any unwanted text like '(64 channels)'
         for c in ax_frp.get_children():
             if isinstance(c, plt.Text) and 'channels' in c.get_text():
                 c.remove()
