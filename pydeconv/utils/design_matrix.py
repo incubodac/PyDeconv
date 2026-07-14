@@ -2,6 +2,7 @@ from __future__ import annotations
 # Design matrix creation and B-spline feature expansion utilities
 import numpy as np
 from typing import Sequence, Optional
+from scipy import sparse
 
 try:
     import torch
@@ -247,3 +248,82 @@ def kept_idxs(feature_tensor, tmin, tmax, sampling_rate, axis=0):
     kept_indices = np.nonzero(cumsum > 0)[0]
 
     return kept_indices.tolist()
+
+
+def shifted_matrix_sparse(
+    feature_matrix: np.ndarray,
+    delays: Sequence[int],
+) -> sparse.csr_matrix:
+    """Build a time-shifted design matrix as a sparse CSR matrix.
+
+    This is the memory-efficient alternative to ``shifted_matrix``.  Instead
+    of allocating a dense ``(n_samples, n_features * n_delays)`` array (which
+    can consume tens of GB for real EEG data), this function constructs the
+    matrix in COO format using only the non-zero entries and converts to CSR.
+
+    Parameters
+    ----------
+    feature_matrix : np.ndarray, shape ``(n_samples, n_features)``
+        The "stick" matrix produced by ``build_design_matrix`` — feature
+        values placed at event latencies, zeros elsewhere.
+    delays : Sequence[int]
+        Relative time shifts (in samples).
+
+    Returns
+    -------
+    X : scipy.sparse.csr_matrix, shape ``(n_samples, n_features * n_delays)``
+        Sparse design matrix.
+
+    """
+    n_samples, n_features = feature_matrix.shape
+    delays_arr = np.asarray(delays, dtype=int)
+    n_delays = len(delays_arr)
+    n_cols = n_features * n_delays
+
+    # Pre-compute non-zero rows for each feature column
+    # (event latencies are the only non-zero rows in the stick matrix)
+    rows_list = []
+    cols_list = []
+    vals_list = []
+
+    for feat_idx in range(n_features):
+        # Find non-zero entries (event latencies) for this feature
+        feat_col = feature_matrix[:, feat_idx]
+        nz_rows = np.nonzero(feat_col)[0]
+        if len(nz_rows) == 0:
+            continue
+        nz_vals = feat_col[nz_rows]
+
+        for di, d in enumerate(delays_arr):
+            # Target rows in the output matrix: shift event positions by delay
+            target_rows = nz_rows + d
+            # Only keep valid (in-bounds) positions
+            valid = (target_rows >= 0) & (target_rows < n_samples)
+            if not np.any(valid):
+                continue
+
+            r = target_rows[valid]
+            v = nz_vals[valid]
+            # Column index in the flattened (n_features * n_delays) layout
+            c_idx = feat_idx * n_delays + di
+            c = np.full(len(r), c_idx, dtype=int)
+
+            rows_list.append(r)
+            cols_list.append(c)
+            vals_list.append(v)
+
+    if rows_list:
+        all_rows = np.concatenate(rows_list)
+        all_cols = np.concatenate(cols_list)
+        all_vals = np.concatenate(vals_list)
+    else:
+        all_rows = np.array([], dtype=int)
+        all_cols = np.array([], dtype=int)
+        all_vals = np.array([], dtype=np.float64)
+
+    X = sparse.coo_matrix(
+        (all_vals, (all_rows, all_cols)),
+        shape=(n_samples, n_cols),
+    ).tocsr()
+
+    return X

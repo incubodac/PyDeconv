@@ -42,6 +42,10 @@ print("Loading EEG data …")
 raw = mne.io.read_raw_eeglab(str(SET_FILE), preload=True, verbose=False)
 
 # Keep only EEG channels (drop EXG misc and eye-tracking channels)
+# Note: some eye channels are loaded as unknown types and auto-classified as EEG. We drop them explicitly.
+eye_chans = ["L-AREA", "L-GAZE-X", "L-GAZE-Y", "TIME"]
+raw.drop_channels([ch for ch in eye_chans if ch in raw.ch_names])
+
 eeg_picks = mne.pick_types(raw.info, eeg=True, misc=False, exclude="bads")
 raw.pick(eeg_picks)
 
@@ -50,6 +54,16 @@ n_channels = len(raw.ch_names)
 n_samples = raw.n_times
 print(f"  sfreq={sfreq} Hz | {n_channels} EEG channels | "
       f"{n_samples} samples ({n_samples / sfreq:.1f} s)")
+
+# Apply window reject filter for channels with noisy segments that will unstabilize the TRF estimation
+from pydeconv.utils.window_rejection import cont_ArtifactDetect
+print("Detecting artifacts in continuous data...")
+WinRej = cont_ArtifactDetect(
+    raw,
+    amplitudeThreshold=150,
+    windowsize=2000,
+    combineSegments=500
+)
 
 # EEG data as (n_samples, n_channels)
 y = raw.get_data().T  # shape: (n_samples, n_channels)
@@ -124,12 +138,24 @@ print(f"  Delays: {len(model.delays_)} "
 
 # ── 6. Fit model ────────────────────────────────────────────────────
 print("\n── Fitting Model ──")
-model.fit(X, y, standardize=True)
+if len(WinRej) > 0:
+    bad_mask = np.zeros(n_samples, dtype=bool)
+    for onset, offset in WinRej:
+        bad_mask[onset:offset] = True
+    clean_mask = ~bad_mask
+    X_fit = X[clean_mask]
+    y_fit = y[clean_mask]
+    print(f"  Excluding {np.sum(bad_mask)} samples ({np.mean(bad_mask)*100:.1f}%) due to artifacts.")
+else:
+    X_fit = X
+    y_fit = y
+
+model.fit(X_fit, y_fit, standardize=True)
 print("  Model fitted successfully.")
 
 # ── 7. Evaluate ─────────────────────────────────────────────────────
 print("\n── Evaluation ──")
-scores = model.score(X, y)
+scores = model.score(X_fit, y_fit)
 if np.ndim(scores) == 0:
     print(f"  R² = {scores:.4f}")
 else:
@@ -145,7 +171,7 @@ else:
 print("\n── Plotting TRFs ──")
 from pydeconv.utils.plotting import plot_trfs_butterfly, plot_design_matrix
 
-fig_trf = plot_trfs_butterfly(model)
+fig_trf = plot_trfs_butterfly(model, baseline=(-0.1, 0.0))
 trf_path = OUTPUT_DIR / "02_trfs.png"
 fig_trf.savefig(trf_path, dpi=150, bbox_inches="tight")
 print(f"  TRF plot saved to {trf_path}")

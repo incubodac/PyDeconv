@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import sparse
 
 # Check optional dependency availability
 try:
@@ -201,10 +202,6 @@ class TestDeconvolutionModelInit:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not _has_torch,
-    reason="torch is required for shifted_matrix / build_design_matrix",
-)
 class TestBuildDesignMatrix:
     """Tests for build_design_matrix with a simple synthetic setup."""
 
@@ -291,7 +288,8 @@ class TestBuildDesignMatrix:
         )
         X = model.build_design_matrix(simple_events, n_samples=200, use_gpu=False)
         # At latency 10, the value should be 0.5**2 = 0.25
-        assert np.isclose(X[10, 0], 0.25)
+        X_dense = X.toarray() if sparse.issparse(X) else X
+        assert np.isclose(X_dense[10, 0], 0.25)
 
     def test_missing_latency_raises(self):
         events = pd.DataFrame({"type": ["a"]})
@@ -377,10 +375,6 @@ class TestFitPredictScore:
             model.predict(np.zeros((10, 3)))
 
 
-@pytest.mark.skipif(
-    not _has_torch,
-    reason="torch is required for shifted_matrix / build_design_matrix",
-)
 class TestEventSpecificAnalysisWindows:
     """Tests for per-event delay windows in the shifted design matrix."""
 
@@ -408,13 +402,14 @@ class TestEventSpecificAnalysisWindows:
         )
 
         X = model.build_design_matrix(events_two_types, n_samples=120, use_gpu=False)
+        X_dense = X.toarray() if sparse.issparse(X) else X
 
         n_delays = len(model.delays_)
         stim_idx = model.feature_names_.index("stimulus:intercept")
         resp_idx = model.feature_names_.index("response:intercept")
 
-        stim_block = X[:, stim_idx * n_delays: (stim_idx + 1) * n_delays]
-        resp_block = X[:, resp_idx * n_delays: (resp_idx + 1) * n_delays]
+        stim_block = X_dense[:, stim_idx * n_delays: (stim_idx + 1) * n_delays]
+        resp_block = X_dense[:, resp_idx * n_delays: (resp_idx + 1) * n_delays]
 
         zero_delay_idx = int(np.where(model.delays_ == 0)[0][0])
         non_zero_delay_idx = [i for i in range(n_delays) if i != zero_delay_idx]

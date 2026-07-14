@@ -8,7 +8,9 @@ from typing import Callable, NamedTuple
 
 import numpy as np
 import pandas as pd
+from scipy import sparse
 from scipy.interpolate import BSpline
+from scipy.linalg import solve as scipy_solve
 from sklearn.base import BaseEstimator, clone, is_regressor
 from sklearn.linear_model import Ridge
 
@@ -707,28 +709,53 @@ class DeconvolutionModel(BaseEstimator):
 
         self.feature_names_ = names
 
-        # ----- 2. Place into a (n_samples, n_columns) stick matrix -----
+        # ----- 2. Place into a sparse (n_samples, n_columns) stick matrix -----
         n_columns = len(columns)
-        feature_matrix = np.zeros((n_samples, n_columns), dtype=np.float64)
-
         latencies = events["latency"].values.astype(int)
         valid = (latencies >= 0) & (latencies < n_samples)
+        valid_lats = latencies[valid]
+
+        stick_rows = []
+        stick_cols = []
+        stick_vals = []
 
         for col_idx in range(n_columns):
-            feature_matrix[latencies[valid], col_idx] = columns[col_idx][valid]
+            col_data = columns[col_idx][valid]
+            nz = col_data != 0
+            if np.any(nz):
+                stick_rows.append(valid_lats[nz])
+                stick_cols.append(np.full(nz.sum(), col_idx, dtype=int))
+                stick_vals.append(col_data[nz])
 
-        # ----- 3. Time-shift -----
-        from .utils.design_matrix import shifted_matrix
+        if stick_rows:
+            all_rows = np.concatenate(stick_rows)
+            all_cols = np.concatenate(stick_cols)
+            all_vals = np.concatenate(stick_vals)
+        else:
+            all_rows = np.array([], dtype=int)
+            all_cols = np.array([], dtype=int)
+            all_vals = np.array([], dtype=np.float64)
 
-        X = shifted_matrix(
-            feature_matrix,
+        feature_matrix = sparse.coo_matrix(
+            (all_vals, (all_rows, all_cols)),
+            shape=(n_samples, n_columns),
+        ).tocsr()
+
+        # ----- 3. Time-shift (sparse) -----
+        from .utils.design_matrix import shifted_matrix_sparse
+
+        # shifted_matrix_sparse needs a dense stick matrix for non-zero lookup,
+        # but the stick matrix is extremely sparse so toarray() is cheap
+        # (n_samples × n_columns, where n_columns is typically < 20)
+        X = shifted_matrix_sparse(
+            feature_matrix.toarray(),
             delays=self.delays_.tolist(),
-            use_gpu=use_gpu,
         )
 
         # Apply event-specific analysis windows by masking delay bins per
         # feature block while preserving the global matrix shape.
         n_delays = len(self.delays_)
+        cols_to_zero = []
         for col_idx, ev_type in enumerate(column_event_types):
             if ev_type == "__global__":
                 continue
@@ -736,8 +763,19 @@ class DeconvolutionModel(BaseEstimator):
             if np.all(keep_mask):
                 continue
             start = col_idx * n_delays
-            end = start + n_delays
-            X[:, start:end] *= keep_mask[np.newaxis, :]
+            for di in range(n_delays):
+                if not keep_mask[di]:
+                    cols_to_zero.append(start + di)
+
+        if cols_to_zero:
+            # Zero out columns efficiently on the CSR matrix
+            cols_arr = np.array(cols_to_zero, dtype=int)
+            # Convert to LIL for efficient column zeroing, then back to CSR
+            X_lil = X.tolil()
+            for c in cols_arr:
+                X_lil[:, c] = 0
+            X = X_lil.tocsr()
+            X.eliminate_zeros()
 
         return X
 
@@ -796,17 +834,71 @@ class DeconvolutionModel(BaseEstimator):
 
         est = clone(self.estimator)
 
-        if standardize:
-            X = self._standardize(X)
+        # --- Sparse + Ridge: normal-equations solver ---
+        # Handles standardization implicitly so X is never densified.
+        if sparse.issparse(X) and isinstance(est, Ridge):
+            alpha = est.alpha
+            y_arr = np.asarray(y)
+            if y_arr.ndim == 1:
+                y_arr = y_arr.reshape(-1, 1)
 
-        est.fit(X, y)
+            n_rows, n_cols = X.shape
 
-        # Extract coefficients — handle 1-D edge case
-        coef = est.coef_
-        if coef.ndim == 1:
-            coef = coef.reshape(1, -1)
-        self.coef_ = coef
-        self.estimator_ = est
+            # Compute X^T X and X^T y directly from sparse X
+            XTX_raw = (X.T @ X).toarray()   # (n_cols, n_cols) — small & dense
+            XTy_raw = X.T @ y_arr            # (n_cols, n_channels)
+            if sparse.issparse(XTy_raw):
+                XTy_raw = XTy_raw.toarray()
+
+            if standardize:
+                # Compute column statistics from sparse X without densifying
+                col_sums = np.asarray(X.sum(axis=0)).ravel()
+                mu = col_sums / n_rows
+
+                col_sum_sq = np.asarray(X.multiply(X).sum(axis=0)).ravel()
+                var = col_sum_sq / n_rows - mu ** 2
+                sigma = np.sqrt(np.maximum(var, 0.0))
+                sigma[sigma == 0] = 1.0
+
+                self._feature_mean_ = mu
+                self._feature_std_ = sigma
+
+                # Implicit standardization in normal equations:
+                #   X_std^T X_std = D (X^T X - n μ μ^T) D
+                #   X_std^T y    = D (X^T y - μ · Σy)
+                D = 1.0 / sigma
+                XTX_std = np.outer(D, D) * (XTX_raw - n_rows * np.outer(mu, mu))
+                y_col_sums = y_arr.sum(axis=0)  # (n_channels,)
+                XTy_std = D[:, None] * (XTy_raw - mu[:, None] * y_col_sums[None, :])
+
+                A = XTX_std + alpha * np.eye(n_cols)
+                coef = scipy_solve(A, XTy_std)
+            else:
+                A = XTX_raw + alpha * np.eye(n_cols)
+                coef = scipy_solve(A, XTy_raw)
+
+            # Store in sklearn-compatible (n_channels, n_cols) layout
+            self.coef_ = coef.T
+            if self.coef_.ndim == 1:
+                self.coef_ = self.coef_.reshape(1, -1)
+            self.estimator_ = est
+
+        else:
+            # --- Dense path: fall back to sklearn ---
+            if sparse.issparse(X):
+                X = X.toarray()
+
+            if standardize:
+                X = self._standardize(X)
+
+            est.fit(X, y)
+
+            coef = est.coef_
+            if coef.ndim == 1:
+                coef = coef.reshape(1, -1)
+            self.coef_ = coef
+            self.estimator_ = est
+
         self.is_fitted = True
         return self
 
@@ -826,11 +918,26 @@ class DeconvolutionModel(BaseEstimator):
         if not self.is_fitted:
             raise RuntimeError("Model has not been fitted yet.")
 
-        # Apply the same standardisation used during fit
+        # When X is sparse and standardization was used, absorb it into
+        # the coefficients to avoid densifying X.
+        #   y_pred = X_std @ β^T = ((X - μ)/σ) @ β^T
+        #          = X @ diag(1/σ) @ β^T  -  (μ/σ) @ β^T
+        if sparse.issparse(X) and self._feature_mean_ is not None:
+            inv_sigma = 1.0 / self._feature_std_
+            # Scale coefficients by 1/σ: (n_channels, n_cols) * (n_cols,)
+            scaled_coef = self.coef_ * inv_sigma[np.newaxis, :]
+            # Offset from subtracting the mean: (n_channels,)
+            offset = (self._feature_mean_ * inv_sigma) @ self.coef_.T
+            # Sparse × dense multiplication (no densification)
+            return X @ scaled_coef.T - offset[np.newaxis, :]
+
+        if sparse.issparse(X):
+            X = X.toarray()
+
         if self._feature_mean_ is not None:
             X = (X - self._feature_mean_) / self._feature_std_
 
-        return self.estimator_.predict(X)
+        return X @ self.coef_.T
 
     def score(
         self, X: np.ndarray, y: np.ndarray
@@ -854,6 +961,9 @@ class DeconvolutionModel(BaseEstimator):
         from sklearn.metrics import r2_score
 
         y_pred = self.predict(X)
+        # Squeeze prediction if y is 1-D but y_pred is (n, 1)
+        if y.ndim == 1 and y_pred.ndim == 2 and y_pred.shape[1] == 1:
+            y_pred = y_pred.ravel()
         if y.ndim == 1:
             return r2_score(y, y_pred)
         return r2_score(y, y_pred, multioutput="raw_values")

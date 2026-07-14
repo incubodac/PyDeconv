@@ -189,7 +189,7 @@ def _feature_delay_mask(model, group_name):
 # ---------------------------------------------------------------------------
 
 
-def plot_trfs_butterfly(model, features=None, figsize=None):
+def plot_trfs_butterfly(model, features=None, figsize=None, baseline=None):
     """Plot TRFs as mean ± SEM across channels (pure matplotlib).
 
     Spline bases belonging to the same feature are grouped on one
@@ -204,6 +204,12 @@ def plot_trfs_butterfly(model, features=None, figsize=None):
         If ``None``, all features are plotted.
     figsize : tuple, optional
         Figure size. Defaults to ``(5 * n_groups, 4)``.
+    baseline : tuple of float or None, optional
+        The time interval (a, b) in seconds to use for baseline correction.
+        If a is None, it defaults to the start of the time window.
+        If b is None, it defaults to the end of the time window.
+        Baseline correction subtracts the mean of the baseline period
+        for each channel. If None, no correction is applied.
 
     Returns
     -------
@@ -219,6 +225,7 @@ def plot_trfs_butterfly(model, features=None, figsize=None):
 
     n_delays = len(model.delays_)
     times = model.times_
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
     groups = _group_features(model.feature_names_)
 
@@ -239,20 +246,50 @@ def plot_trfs_butterfly(model, features=None, figsize=None):
         delay_mask = _feature_delay_mask(model, group_name)
         t_plot = times[delay_mask]
 
+        # Check if this group is a spline group
+        is_spline = any("_sp_" in name for name in feat_names)
+
+        # Sum up the coefficients for all spline bases/features in the group
+        trf_group = np.zeros((coef.shape[0], n_delays))
         for feat_name in feat_names:
             feat_idx = model.feature_names_.index(feat_name)
             start = feat_idx * n_delays
             end = start + n_delays
-            trf = coef[:, start:end][:, delay_mask]
+            trf_group += coef[:, start:end]
 
-            mean_trf = trf.mean(axis=0)
-            sem_trf = trf.std(axis=0) / np.sqrt(trf.shape[0])
+        # If it is a spline feature, add the corresponding event intercept if present
+        if is_spline:
+            if ":" in group_name:
+                prefix = group_name.split(":")[0]
+                intercept_name = f"{prefix}:intercept"
+            else:
+                intercept_name = "intercept"
 
-            label = feat_name.split(":")[-1] if ":" in feat_name else feat_name
-            ax.plot(t_plot, mean_trf, lw=1.5, label=label)
-            ax.fill_between(
-                t_plot, mean_trf - sem_trf, mean_trf + sem_trf, alpha=0.2,
-            )
+            if intercept_name in model.feature_names_:
+                intercept_idx = model.feature_names_.index(intercept_name)
+                start_int = intercept_idx * n_delays
+                end_int = start_int + n_delays
+                trf_group += coef[:, start_int:end_int]
+
+        # Apply delay mask
+        trf = trf_group[:, delay_mask].copy()
+
+        if baseline is not None:
+            bmin, bmax = baseline
+            bmin = bmin if bmin is not None else t_plot[0]
+            bmax = bmax if bmax is not None else t_plot[-1]
+            base_mask = (t_plot >= bmin) & (t_plot <= bmax)
+            if np.any(base_mask):
+                base_mean = trf[:, base_mask].mean(axis=1, keepdims=True)
+                trf = trf - base_mean
+
+        label = group_name.split(":")[-1] if ":" in group_name else group_name
+        # Get the color for this feature from the default color cycle
+        group_idx = list(groups.keys()).index(group_name)
+        color = colors[group_idx % len(colors)]
+        for ch_idx in range(trf.shape[0]):
+            lbl = label if ch_idx == 0 else None
+            ax.plot(t_plot, trf[ch_idx], lw=0.7, alpha=0.4, color=color, label=lbl)
 
         ax.axhline(0, color="k", lw=0.5, ls="--")
         ax.axvline(0, color="k", lw=0.5, ls=":")
@@ -260,11 +297,10 @@ def plot_trfs_butterfly(model, features=None, figsize=None):
         ax.set_ylabel("Coefficient (a.u.)")
         title = group_name.replace(":", " → ")
         ax.set_title(title, fontweight="bold")
-        if len(feat_names) > 1:
-            ax.legend(fontsize=7, loc="best")
+        ax.legend(fontsize=7, loc="best")
 
     fig.suptitle(
-        "Temporal Response Functions (mean ± SEM across channels)",
+        "Temporal Response Functions (Butterfly Plot)",
         fontweight="bold", y=1.02,
     )
     plt.tight_layout()
@@ -323,6 +359,8 @@ def plot_design_matrix(
         i * n_delays + zero_delay_idx for i in range(len(model.feature_names_))
     ]
     X_plot = X[snippet_start:snippet_end, :][:, col_indices]
+    if hasattr(X_plot, "toarray"):
+        X_plot = X_plot.toarray()
 
     t_snippet = np.arange(snippet_start, snippet_end) / sfreq
 
@@ -340,7 +378,7 @@ def plot_design_matrix(
     return fig
 
 
-def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
+def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8), baseline=None):
     """Plot the fitted Temporal Response Functions (TRFs) using MNE.
 
     This uses a horizontal layout inspired by the legacy PyDeconv plots,
@@ -362,6 +400,11 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
         If False, only plots the butterfly time-series.
     figsize : tuple, default (15, 8)
         The overall figure size.
+    baseline : tuple of float or None, optional
+        The time interval (a, b) in seconds to use for baseline correction.
+        If a is None, it defaults to the start of the time window.
+        If b is None, it defaults to the end of the time window.
+        If None, no baseline correction is applied.
 
     Returns
     -------
@@ -427,13 +470,16 @@ def plot_trfs(model, info=None, features=None, top_topos=True, figsize=(15, 8)):
 
         # Event-specific features can have narrower analysis windows.
         keep_mask = _feature_delay_mask(feat_name)
-        data = data_full[:, keep_mask]
+        data = data_full[:, keep_mask].copy()
         times_feat = times[keep_mask]
         x_lims = (times_feat[0], times_feat[-1])
 
         # Create an Evoked object
         grand_avg = mne.EvokedArray(data, info, tmin=times_feat[0], verbose=False)
         grand_avg.nave = None
+        if baseline is not None:
+            grand_avg.apply_baseline(baseline, verbose=False)
+            data = grand_avg.data
 
         # Determine global max for symmetric colormap
         vmax = np.max(np.abs(data))
