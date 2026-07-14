@@ -41,9 +41,7 @@ venv.bak/
 .agents/
 
 
-# EEG binary data files (prevent repo bloat)
-*.fdt
-*.set
+# EEG binary data files (large formats kept out of git)
 *.edf
 *.bdf
 *.vhdr
